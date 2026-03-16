@@ -1,5 +1,6 @@
 mod config;
 mod logic;
+mod notifications;
 mod window;
 
 use crate::window::Window;
