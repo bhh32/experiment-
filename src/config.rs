@@ -144,26 +144,3 @@ pub fn load_preferences() -> AppPreferences {
 
     prefs
 }
-
-/// Save the full preferences struct to config.
-pub fn save_preferences(config: &Config, prefs: &AppPreferences) {
-    update_config(config.clone(), "exit-node", format!("{:?}", prefs.exit_node_idx));
-    update_config(config.clone(), "allow-lan", prefs.allow_lan);
-    update_config(config.clone(), "ssh-enabled", prefs.ssh_enabled);
-    update_config(config.clone(), "routes-accepted", prefs.routes_accepted);
-    update_config(config.clone(), "auto-connect", prefs.auto_connect);
-    update_config(
-        config.clone(),
-        "download-dir",
-        prefs
-            .download_dir
-            .clone()
-            .unwrap_or_default(),
-    );
-    update_config(config.clone(), "poll-interval", prefs.poll_interval_secs);
-    update_config(config.clone(), "notifications-enabled", prefs.notifications_enabled);
-    update_config(config.clone(), "notify-connection", prefs.notify_on_connection_change);
-    update_config(config.clone(), "notify-files", prefs.notify_on_incoming_files);
-    update_config(config.clone(), "notify-device", prefs.notify_on_new_device);
-    update_config(config.clone(), "icon-style", prefs.icon_style.clone());
-}

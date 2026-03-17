@@ -85,11 +85,6 @@ impl TailscaleClient {
         }
     }
 
-    /// Create a new client with a custom socket path.
-    pub fn with_socket_path(path: String) -> Self {
-        Self { socket_path: path }
-    }
-
     /// Check if the tailscaled socket exists.
     pub fn is_available(&self) -> bool {
         std::path::Path::new(&self.socket_path).exists()
@@ -206,36 +201,6 @@ impl TailscaleClient {
             .map_err(|e| TailscaleError::ParseError(format!("prefs: {e}")))
     }
 
-    /// Get the DERP map.
-    pub async fn derpmap(&self) -> TsResult<serde_json::Value> {
-        let body = self.get("/localapi/v0/derpmap").await?;
-        serde_json::from_str(&body)
-            .map_err(|e| TailscaleError::ParseError(format!("derpmap: {e}")))
-    }
-
-    /// Whois lookup for a tailnet address.
-    pub async fn whois(&self, addr: &str) -> TsResult<WhoIsResponse> {
-        let body = self
-            .get(&format!("/localapi/v0/whois?addr={addr}"))
-            .await?;
-        serde_json::from_str(&body)
-            .map_err(|e| TailscaleError::ParseError(format!("whois: {e}")))
-    }
-
-    /// Get suggested exit node.
-    pub async fn suggest_exit_node(&self) -> TsResult<serde_json::Value> {
-        let body = self.get("/localapi/v0/suggest-exit-node").await?;
-        serde_json::from_str(&body)
-            .map_err(|e| TailscaleError::ParseError(format!("suggest-exit-node: {e}")))
-    }
-
-    /// Get file transfer targets (devices that can receive files).
-    pub async fn file_targets(&self) -> TsResult<Vec<FileTarget>> {
-        let body = self.get("/localapi/v0/file-targets").await?;
-        serde_json::from_str(&body)
-            .map_err(|e| TailscaleError::ParseError(format!("file-targets: {e}")))
-    }
-
     /// Get available profiles (accounts).
     pub async fn profiles(&self) -> TsResult<Vec<Profile>> {
         let body = self.get("/localapi/v0/profiles/").await?;
@@ -260,25 +225,6 @@ impl TailscaleClient {
         let response = self.patch("/localapi/v0/prefs", Some(body)).await?;
         serde_json::from_str(&response)
             .map_err(|e| TailscaleError::ParseError(format!("set_prefs response: {e}")))
-    }
-
-    /// Start/connect tailscale (equivalent to `tailscale up`).
-    pub async fn start(&self) -> TsResult<()> {
-        let opts = serde_json::json!({
-            "UpdatePrefs": { "WantRunning": true }
-        });
-        self.post(
-            "/localapi/v0/start",
-            Some(opts.to_string()),
-        )
-        .await?;
-        Ok(())
-    }
-
-    /// Logout / disconnect.
-    pub async fn logout(&self) -> TsResult<()> {
-        self.post("/localapi/v0/logout", None).await?;
-        Ok(())
     }
 
     /// Interactive login (opens browser).
@@ -537,11 +483,6 @@ impl TailscaleClient {
         self.set_prefs(&prefs).await
     }
 
-    /// Watch the IPN bus for real-time state changes.
-    /// Returns a stream of state change events.
-    pub async fn watch_ipn_bus(&self) -> TsResult<String> {
-        self.get("/localapi/v0/watch-ipn-bus?mask=all").await
-    }
 }
 
 impl Default for TailscaleClient {
@@ -737,28 +678,6 @@ pub struct PrefsUpdate {
     pub hostname: Option<String>,
 }
 
-/// WhoIs response.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "PascalCase")]
-pub struct WhoIsResponse {
-    pub node: Option<PeerStatus>,
-    pub user_profile: Option<UserProfile>,
-}
-
-/// User profile info.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "PascalCase")]
-pub struct UserProfile {
-    #[serde(rename = "ID", default)]
-    pub id: u64,
-    #[serde(default)]
-    pub login_name: String,
-    #[serde(default)]
-    pub display_name: String,
-    #[serde(default)]
-    pub profile_pic_url: String,
-}
-
 /// Profile (account) info.
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
 #[serde(rename_all = "PascalCase")]
@@ -791,13 +710,6 @@ pub struct NetworkProfile {
     /// Domain name.
     #[serde(default)]
     pub domain_name: String,
-}
-
-/// File target for Tail Drop.
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-#[serde(rename_all = "PascalCase")]
-pub struct FileTarget {
-    pub node: PeerStatus,
 }
 
 /// A file waiting in the Tail Drop inbox.

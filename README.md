@@ -26,7 +26,6 @@ The GUI Scale applet provides a user-friendly interface for managing Tailscale c
 - **Copy to Clipboard** — One-click copy of IP addresses and DNS names (Wayland via wl-copy)
 - **Persistent Preferences** — All settings saved across sessions (auto-connect, download dir, poll interval, notification prefs, icon style)
 - **Graceful Error Handling** — Friendly messages when Tailscale is not installed, daemon is down, or operator permission is missing
-- **Internationalization** — Full UI localization in 7 languages: English, Dutch, Swedish, Spanish, French, German, Portuguese
 - Memory-safe implementation in Rust
     - Utilizes Rust's ownership system for memory-safety operations
     - No unsafe code blocks used
@@ -148,13 +147,3 @@ No `tailscale` CLI binary is spawned. All operations use structured JSON over th
 | **Exit Node** | Exit node selection, host exit node toggle, LAN access |
 | **Devices** | Full device browser with details panel and ping |
 | **Settings** | Auto-connect, notifications, download dir, poll interval, icon style |
-
-## Supported Languages
-
-- English (en)
-- Dutch (nl)
-- Swedish (sv)
-- Spanish (es)
-- French (fr)
-- German (de)
-- Portuguese (pt)

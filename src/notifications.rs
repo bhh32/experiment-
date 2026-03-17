@@ -59,23 +59,10 @@ pub fn notify_files_received(path: &str) {
     );
 }
 
-/// Notify when the exit node becomes unreachable.
-pub fn notify_exit_node_unreachable(node: &str) {
-    send_notification(
-        "Exit Node Unreachable",
-        &format!("Exit node '{node}' is no longer reachable."),
-    );
-}
-
 /// Notify when an account switch occurs.
 pub fn notify_account_switched(account: &str) {
     send_notification(
         "Account Switched",
         &format!("Switched to Tailscale account: {account}"),
     );
-}
-
-/// Notify of an error condition.
-pub fn notify_error(message: &str) {
-    send_notification("Tailscale Error", message);
 }

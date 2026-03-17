@@ -184,7 +184,6 @@ pub enum Message {
     DownloadDirSelected(Vec<Url>),
     DownloadDirCancelled,
 
-    // Async result stubs
     ActionCompleted(Result<(), String>),
 }
 
