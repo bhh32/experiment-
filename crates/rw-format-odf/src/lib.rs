@@ -36,15 +36,10 @@ pub enum OdfError {
 
 /// Read an ODF document from a file path.
 pub fn read_odt(path: &std::path::Path) -> Result<Document, OdfError> {
-    let _file = std::fs::File::open(path)?;
-    // TODO: Implement ODF reading
-    Ok(Document::new())
+    reader::read_odf(path)
 }
 
 /// Write a document to ODF format at the given path.
 pub fn write_odt(doc: &Document, path: &std::path::Path) -> Result<(), OdfError> {
-    let _file = std::fs::File::create(path)?;
-    let _ = doc;
-    // TODO: Implement ODF writing
-    Ok(())
+    writer::write_odf(doc, path)
 }

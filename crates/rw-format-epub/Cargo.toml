@@ -9,5 +9,6 @@ license.workspace = true
 serde = { workspace = true }
 thiserror = { workspace = true }
 epub-builder = { workspace = true }
+zip = { workspace = true }
 rw-document = { workspace = true }
 rw-format-html = { workspace = true }

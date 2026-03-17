@@ -53,3 +53,4 @@ log = { workspace = true }
 env_logger = { workspace = true }
 tokio = { workspace = true }
 dirs = { workspace = true }
+chrono = { workspace = true }

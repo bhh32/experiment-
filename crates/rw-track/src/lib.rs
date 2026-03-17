@@ -82,3 +82,92 @@ impl Default for TrackingConfig {
         }
     }
 }
+
+/// The main change tracker struct.
+#[derive(Debug)]
+pub struct ChangeTracker {
+    config: TrackingConfig,
+    changes: Vec<TrackedChange>,
+}
+
+impl ChangeTracker {
+    /// Create a new change tracker with the given configuration.
+    pub fn new(config: TrackingConfig) -> Self {
+        Self {
+            config,
+            changes: Vec::new(),
+        }
+    }
+
+    /// Record an insertion of `text` by `author`.
+    pub fn record_insertion(&mut self, author: &str, text: &str) -> TrackedChange {
+        let change = TrackedChange {
+            id: Uuid::new_v4(),
+            change_type: ChangeType::Insertion,
+            author: author.to_string(),
+            date: Utc::now(),
+            text: Some(text.to_string()),
+            format_description: None,
+        };
+        self.changes.push(change.clone());
+        change
+    }
+
+    /// Record a deletion of `text` by `author`.
+    pub fn record_deletion(&mut self, author: &str, text: &str) -> TrackedChange {
+        let change = TrackedChange {
+            id: Uuid::new_v4(),
+            change_type: ChangeType::Deletion,
+            author: author.to_string(),
+            date: Utc::now(),
+            text: Some(text.to_string()),
+            format_description: None,
+        };
+        self.changes.push(change.clone());
+        change
+    }
+
+    /// Record a formatting change described by `description` by `author`.
+    pub fn record_format_change(&mut self, author: &str, description: &str) -> TrackedChange {
+        let change = TrackedChange {
+            id: Uuid::new_v4(),
+            change_type: ChangeType::FormatChange,
+            author: author.to_string(),
+            date: Utc::now(),
+            text: None,
+            format_description: Some(description.to_string()),
+        };
+        self.changes.push(change.clone());
+        change
+    }
+
+    /// Accept (remove from pending list) a change by its ID.
+    pub fn accept_change(&mut self, change_id: Uuid) {
+        self.changes.retain(|c| c.id != change_id);
+    }
+
+    /// Reject (remove from pending list) a change by its ID.
+    pub fn reject_change(&mut self, change_id: Uuid) {
+        self.changes.retain(|c| c.id != change_id);
+    }
+
+    /// Accept all pending changes.
+    pub fn accept_all(&mut self) {
+        self.changes.clear();
+    }
+
+    /// Reject all pending changes.
+    pub fn reject_all(&mut self) {
+        self.changes.clear();
+    }
+
+    /// Return a slice of all pending changes.
+    pub fn get_changes(&self) -> &[TrackedChange] {
+        &self.changes
+    }
+
+    /// Return all changes by a specific author.
+    pub fn get_changes_by_author(&self, author: &str) -> Vec<&TrackedChange> {
+        self.changes.iter().filter(|c| c.author == author).collect()
+    }
+}

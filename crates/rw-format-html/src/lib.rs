@@ -24,14 +24,20 @@ pub enum HtmlError {
 
 /// Read an HTML document from a file path.
 pub fn read_html(path: &std::path::Path) -> Result<Document, HtmlError> {
-    let _content = std::fs::read_to_string(path)?;
-    // TODO: Implement HTML reading
-    Ok(Document::new())
+    reader::read_html(path)
+}
+
+/// Parse an HTML string into a Document (useful for EPUB import etc.).
+pub fn parse_html(html: &str) -> Result<Document, HtmlError> {
+    reader::parse_html(html)
 }
 
 /// Write a document to HTML format at the given path.
 pub fn write_html(doc: &Document, path: &std::path::Path) -> Result<(), HtmlError> {
-    let _ = (doc, path);
-    // TODO: Implement HTML writing
-    Ok(())
+    writer::write_html(doc, path)
+}
+
+/// Generate an HTML string from a document (without writing to disk).
+pub fn generate_html(doc: &Document) -> String {
+    writer::generate_html(doc)
 }

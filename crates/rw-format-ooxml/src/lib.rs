@@ -55,15 +55,14 @@ pub mod ns {
 
 /// Read a .docx document from a file path.
 pub fn read_docx(path: &std::path::Path) -> Result<Document, OoxmlError> {
-    let _file = std::fs::File::open(path)?;
-    // TODO: Implement OOXML reading
-    Ok(Document::new())
+    let file = std::fs::File::open(path)?;
+    let buf_reader = std::io::BufReader::new(file);
+    reader::read_docx_from_reader(buf_reader)
 }
 
 /// Write a document to .docx format at the given path.
 pub fn write_docx(doc: &Document, path: &std::path::Path) -> Result<(), OoxmlError> {
-    let _file = std::fs::File::create(path)?;
-    let _ = doc;
-    // TODO: Implement OOXML writing
-    Ok(())
+    let file = std::fs::File::create(path)?;
+    let buf_writer = std::io::BufWriter::new(file);
+    writer::write_docx_to_writer(doc, buf_writer)
 }

@@ -57,7 +57,7 @@ pub struct UndoManager<D> {
     save_point: Option<usize>,
 }
 
-impl<D> UndoManager<D> {
+impl<D: fmt::Debug + 'static> UndoManager<D> {
     /// Create a new UndoManager with unlimited undo levels.
     pub fn new() -> Self {
         Self {
@@ -199,7 +199,7 @@ impl<D> UndoManager<D> {
     }
 }
 
-impl<D> Default for UndoManager<D> {
+impl<D: fmt::Debug + 'static> Default for UndoManager<D> {
     fn default() -> Self {
         Self::new()
     }
@@ -212,7 +212,7 @@ struct CompoundCommand<D> {
     desc: String,
 }
 
-impl<D> Command<D> for CompoundCommand<D> {
+impl<D: fmt::Debug + 'static> Command<D> for CompoundCommand<D> {
     fn execute(&mut self, doc: &mut D) {
         for cmd in &mut self.commands {
             cmd.execute(doc);

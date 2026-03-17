@@ -26,14 +26,10 @@ pub enum RtfError {
 
 /// Read an RTF document from a file path.
 pub fn read_rtf(path: &std::path::Path) -> Result<Document, RtfError> {
-    let _content = std::fs::read_to_string(path)?;
-    // TODO: Implement RTF reading
-    Ok(Document::new())
+    reader::read_rtf(path)
 }
 
 /// Write a document to RTF format at the given path.
 pub fn write_rtf(doc: &Document, path: &std::path::Path) -> Result<(), RtfError> {
-    let _ = (doc, path);
-    // TODO: Implement RTF writing
-    Ok(())
+    writer::write_rtf(doc, path)
 }
