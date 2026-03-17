@@ -10,7 +10,8 @@ The GUI Scale applet provides a user-friendly interface for managing Tailscale c
 
 ### Key Features
 
-- **Tabbed Interface** — Organized UI with tabs for Status, Tail Drop, Exit Node, Devices, Serve, Subnets, and Settings
+- **Flatpak-Safe Architecture** — Communicates directly with the `tailscaled` daemon via its LocalAPI Unix socket (`/var/run/tailscale/tailscaled.sock`) using HTTP-over-UDS. No dependency on the `tailscale` CLI binary — works inside Flatpak sandboxes
+- **Tabbed Interface** — Organized UI with tabs for Status, Tail Drop, Exit Node, Devices, and Settings
 - **Real-time Status Monitoring** — Periodic background polling keeps connection state, device list, and IP addresses up to date without blocking the UI
 - **Connection Management** — Connect/disconnect, enable SSH, accept routes, toggle MagicDNS
 - **Multi-Account Support** — Switch between Tailscale accounts, log in to new accounts
@@ -41,24 +42,42 @@ The applet implements a layered security approach:
     - Proper capability isolation
     - Startup check for operator permission
 2. Error Handling
-    - All CLI interactions wrapped in Result types — no panics on missing Tailscale
-    - Graceful degradation when services are unavailable
+    - All LocalAPI interactions wrapped in Result types — no panics
+    - Graceful degradation when daemon is unavailable
     - No information leakage
 
 ## Dependencies
 
-You must first have Tailscale installed and then run:
+You must have `tailscaled` running and set the operator permission:
 
 ```bash
+sudo systemctl start tailscaled
 sudo tailscale set --operator=$USER
 ```
 
 This makes it where the applet doesn't need sudo (root) to do its job.
 
+**Note:** The applet does NOT require the `tailscale` CLI binary. It communicates directly with the `tailscaled` daemon via its Unix socket LocalAPI.
+
 ### System Dependencies
 
-- Tailscale CLI (`tailscale`)
-- `wl-copy` (for clipboard support on Wayland)
+- `tailscaled` (the Tailscale daemon — must be running)
+- `wl-copy` (for clipboard support on Wayland, optional)
+
+### Flatpak
+
+The applet is Flatpak-compatible. It needs access to the tailscaled socket:
+
+```bash
+# Grant socket access to the Flatpak app
+flatpak override --user com.github.bhh32.GUIScaleApplet --filesystem=/var/run/tailscale
+```
+
+Or in your Flatpak manifest's `finish-args`:
+
+```json
+"--filesystem=/var/run/tailscale"
+```
 
 ## Screenshots
 
@@ -96,22 +115,38 @@ sudo just install
 ```
 src/
 ├── main.rs           # Entry point, launches COSMIC applet
+├── tailscale_api.rs  # LocalAPI client (HTTP-over-Unix-socket to tailscaled)
+├── logic.rs          # High-level Tailscale operations built on the API client
 ├── window.rs         # UI state, message handling, tabbed views, subscriptions
-├── logic.rs          # Tailscale CLI interaction (all Result-based, no panics)
 ├── config.rs         # Persistent preferences via COSMIC config API
 └── notifications.rs  # Desktop notifications via notify-rust
 ```
+
+### Communication Architecture
+
+```
+┌──────────────────┐    HTTP/1.1 over     ┌──────────────┐
+│  GUI Scale       │ ──────────────────── │  tailscaled   │
+│  Applet          │    Unix socket       │  daemon       │
+│  (this app)      │                      │               │
+│                  │  /localapi/v0/...    │  manages the  │
+│  tailscale_api.rs│  (JSON req/resp)     │  WireGuard    │
+│  → hyper client  │                      │  tunnel       │
+└──────────────────┘                      └──────────────┘
+        │
+        └── /var/run/tailscale/tailscaled.sock
+```
+
+No `tailscale` CLI binary is spawned. All operations use structured JSON over the LocalAPI.
 
 ### Tabs
 
 | Tab | Description |
 |-----|-------------|
-| **Status** | Account, IPs, connection toggles, SSH, routes, MagicDNS, Tailnet Lock |
-| **Tail Drop** | File send/receive with device selection and status |
+| **Status** | Account, IPs, connection toggles, SSH, routes, MagicDNS, subnet routes |
+| **Tail Drop** | File send/receive with device selection, inbox, and status |
 | **Exit Node** | Exit node selection, host exit node toggle, LAN access |
 | **Devices** | Full device browser with details panel and ping |
-| **Serve** | Manage Tailscale Serve entries and Funnel |
-| **Subnets** | Advertise and manage subnet routes |
 | **Settings** | Auto-connect, notifications, download dir, poll interval, icon style |
 
 ## Supported Languages

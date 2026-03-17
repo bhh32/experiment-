@@ -1,6 +1,7 @@
 mod config;
 mod logic;
 mod notifications;
+mod tailscale_api;
 mod window;
 
 use crate::window::Window;

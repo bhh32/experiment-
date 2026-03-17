@@ -1,17 +1,10 @@
-use crate::config::{load_config, load_preferences, update_config, AppPreferences, APP_ID, CONFIG_VERS};
+use crate::config::{load_preferences, update_config, AppPreferences, APP_ID, CONFIG_VERS};
 use crate::logic::{
-    self, clear_status, copy_to_clipboard, enable_exit_node, exit_node_allow_lan_access,
-    format_bytes, get_acct_list, get_avail_exit_nodes, get_current_acct, get_device_details,
-    get_is_exit_node, get_lock_status, get_magic_dns_status, get_serve_status,
-    get_tailscale_con_status, get_tailscale_devices, get_tailscale_ip, get_tailscale_ipv6,
-    get_tailscale_routes_status, get_tailscale_ssh_status, login_new_account, ping_device,
-    set_exit_node, set_magic_dns, set_routes, set_ssh, switch_accounts, tailscale_int_up,
-    tailscale_receive, tailscale_send, check_tailscale_available, check_operator_set,
-    get_advertised_routes, set_advertised_routes,
-    add_serve, remove_serve, toggle_funnel,
-    lock_sign_node, DeviceInfo, LockStatus, PingResult, ServeEntry, TailscaleError,
+    self, clear_status, copy_to_clipboard, default_download_dir, format_bytes,
+    AccountInfo, DeviceInfo, PingResult, TailscaleState, WaitingFile,
 };
 use crate::notifications;
+use crate::tailscale_api::{TailscaleClient, TailscaleError};
 use cosmic::app::Core;
 use cosmic::cosmic_config::Config;
 use cosmic::dialog::file_chooser::{self, FileFilter};
@@ -23,7 +16,6 @@ use cosmic::iced::{
     Alignment, Length, Limits, Subscription,
 };
 use cosmic::iced_runtime::core::window;
-use cosmic::iced_widget::Row;
 use cosmic::widget::{
     button, dropdown, icon, list_column,
     settings::{self},
@@ -49,8 +41,6 @@ pub enum Tab {
     TailDrop,
     ExitNode,
     Devices,
-    Serve,
-    Subnets,
     Settings,
 }
 
@@ -61,8 +51,6 @@ impl Tab {
             Tab::TailDrop => "Tail Drop",
             Tab::ExitNode => "Exit Node",
             Tab::Devices => "Devices",
-            Tab::Serve => "Serve",
-            Tab::Subnets => "Subnets",
             Tab::Settings => "Settings",
         }
     }
@@ -73,8 +61,6 @@ impl Tab {
             Tab::TailDrop,
             Tab::ExitNode,
             Tab::Devices,
-            Tab::Serve,
-            Tab::Subnets,
             Tab::Settings,
         ]
     }
@@ -82,73 +68,46 @@ impl Tab {
 
 // ─── Application State ──────────────────────────────────────────────────────
 
-/// The applet health state (from startup checks).
 #[derive(Debug, Clone)]
 pub enum AppHealth {
-    /// Everything is good.
     Healthy,
-    /// Tailscale is not installed.
-    NotInstalled,
-    /// Tailscale daemon is not running.
-    DaemonDown,
-    /// Operator permission is not set.
-    NoOperator,
-    /// Some other error.
+    SocketNotFound,
+    OperatorNotSet,
     Error(String),
 }
 
-/// Holds the applet's state.
 pub struct Window {
     core: Core,
     config: Config,
+    client: TailscaleClient,
     popup: Option<Id>,
     health: AppHealth,
 
-    // ── Connection state ──
-    ssh: bool,
-    routes: bool,
-    connect: bool,
-    magic_dns: bool,
-    ip_v4: String,
-    ip_v6: String,
+    // ── Tailscale state (refreshed by polling) ──
+    state: TailscaleState,
 
-    // ── Tail Drop ──
-    device_options: Vec<String>,
-    selected_device: String,
+    // ── Tail Drop UI state ──
     selected_device_idx: Option<usize>,
-    send_files: Vec<Option<String>>,
+    selected_device_name: String,
+    send_files: Vec<String>,
     send_file_status: String,
     files_sent: bool,
     receive_file_status: String,
 
-    // ── Exit Node ──
-    avail_exit_nodes: Vec<String>,
-    sel_exit_node: String,
+    // ── Exit Node UI state ──
+    exit_node_names: Vec<String>,
     sel_exit_node_idx: Option<usize>,
-    allow_lan: bool,
-    is_exit_node: bool,
 
-    // ── Accounts ──
-    acct_list: Vec<String>,
-    cur_acct: String,
+    // ── Account dropdown ──
+    acct_names: Vec<String>,
 
-    // ── Devices (detailed) ──
-    devices: Vec<DeviceInfo>,
+    // ── Devices tab ──
     selected_device_detail_idx: Option<usize>,
     ping_result: Option<PingResult>,
     ping_in_progress: bool,
 
-    // ── Serve & Funnel ──
-    serve_entries: Vec<ServeEntry>,
-    serve_port_input: String,
-    serve_path_input: String,
-
-    // ── Subnets ──
-    advertised_routes: Vec<String>,
+    // ── Subnet input ──
     subnet_input: String,
-
-    // ── Tailnet Lock ──
-    lock_status: Option<LockStatus>,
 
     // ── Preferences ──
     preferences: AppPreferences,
@@ -157,37 +116,36 @@ pub struct Window {
     active_tab: Tab,
     previous_connect_state: bool,
     previous_device_count: usize,
-
-    // ── Notification tracking ──
     notifications_initialized: bool,
+    initial_load_done: bool,
 }
 
 // ─── Messages ────────────────────────────────────────────────────────────────
 
 #[derive(Clone, Debug)]
 pub enum Message {
-    // ── Popup management ──
+    // Popup
     TogglePopup,
     PopupClosed(Id),
 
-    // ── Tab navigation ──
+    // Tabs
     SwitchTab(Tab),
 
-    // ── Periodic polling ──
+    // Polling
     Tick,
-    TickResult(TickData),
+    StateLoaded(Result<TailscaleState, String>),
 
-    // ── Connection controls ──
+    // Connection
     EnableSSH(bool),
     AcceptRoutes(bool),
     ConnectDisconnect(bool),
     ToggleMagicDns(bool),
 
-    // ── Account management ──
+    // Accounts
     SwitchAccount(usize),
     LoginNewAccount,
 
-    // ── Tail Drop ──
+    // Tail Drop
     DeviceSelected(usize),
     ChooseFiles,
     FilesSelected(Vec<Url>),
@@ -198,31 +156,23 @@ pub enum Message {
     FilesReceived(String),
     ClearTailDropStatus,
 
-    // ── Exit Node ──
+    // Exit Node
     ExitNodeSelected(usize),
     AllowExitNodeLanAccess(bool),
     UpdateIsExitNode(bool),
 
-    // ── Device details ──
+    // Device details
     SelectDeviceDetail(usize),
     PingDevice(String),
-    PingResult(Result<PingResult, String>),
+    PingCompleted(Result<PingResult, String>),
     CopyToClipboard(String),
 
-    // ── Serve & Funnel ──
-    ServePortInput(String),
-    ServePathInput(String),
-    AddServe,
-    RemoveServe(String),
-    ToggleFunnel(u16, bool),
-    RefreshServe,
-
-    // ── Subnets ──
+    // Subnets
     SubnetInput(String),
     AddSubnet,
     RemoveSubnet(usize),
 
-    // ── Settings ──
+    // Settings
     SetAutoConnect(bool),
     SetNotificationsEnabled(bool),
     SetNotifyConnection(bool),
@@ -233,20 +183,9 @@ pub enum Message {
     ChooseDownloadDir,
     DownloadDirSelected(Vec<Url>),
     DownloadDirCancelled,
-}
 
-/// Data returned by the periodic tick.
-#[derive(Clone, Debug)]
-pub struct TickData {
-    pub connected: bool,
-    pub ip_v4: String,
-    pub ip_v6: String,
-    pub ssh: bool,
-    pub routes: bool,
-    pub magic_dns: bool,
-    pub devices: Vec<DeviceInfo>,
-    pub device_names: Vec<String>,
-    pub is_exit_node: bool,
+    // Async result stubs
+    ActionCompleted(Result<(), String>),
 }
 
 // ─── Application Implementation ─────────────────────────────────────────────
@@ -266,128 +205,66 @@ impl cosmic::Application for Window {
     }
 
     fn init(core: Core, _flags: Self::Flags) -> (Window, Task<Action<Self::Message>>) {
-        // Perform startup health checks
-        let health = match check_tailscale_available() {
-            Ok(()) => match check_operator_set() {
-                Ok(true) => AppHealth::Healthy,
-                Ok(false) => AppHealth::NoOperator,
-                Err(e) => AppHealth::Error(e.to_string()),
-            },
-            Err(TailscaleError::NotInstalled) => AppHealth::NotInstalled,
-            Err(TailscaleError::DaemonNotRunning) => AppHealth::DaemonDown,
-            Err(e) => AppHealth::Error(e.to_string()),
-        };
-
-        // Load persistent preferences
+        let client = TailscaleClient::new();
         let preferences = load_preferences();
 
-        // Only query Tailscale state if healthy
-        let (ssh, routes, connect, magic_dns, ip_v4, ip_v6, device_options, devices,
-             allow_lan, is_exit_node, avail_exit_nodes, acct_list, cur_acct,
-             serve_entries, advertised_routes, lock_status) =
-            if matches!(health, AppHealth::Healthy) {
-                let ssh = get_tailscale_ssh_status().unwrap_or(false);
-                let routes = get_tailscale_routes_status().unwrap_or(false);
-                let connect = get_tailscale_con_status().unwrap_or(false);
-                let magic_dns = get_magic_dns_status().unwrap_or(true);
-                let ip_v4 = get_tailscale_ip().unwrap_or_else(|_| "N/A".to_string());
-                let ip_v6 = get_tailscale_ipv6().unwrap_or_else(|_| "N/A".to_string());
-                let device_options = get_tailscale_devices().unwrap_or_else(|_| vec!["Select".to_string()]);
-                let devices = get_device_details().unwrap_or_default();
-                let is_exit_node = get_is_exit_node().unwrap_or(false);
+        let health = if client.is_available() {
+            AppHealth::Healthy
+        } else {
+            AppHealth::SocketNotFound
+        };
 
-                let allow_lan = preferences.allow_lan;
-
-                let avail_exit_nodes = if !is_exit_node {
-                    get_avail_exit_nodes().unwrap_or_else(|_| vec!["None".to_string()])
-                } else {
-                    vec!["Can't select an exit node\nwhile host is an exit node!".to_string()]
-                };
-
-                let acct_list = get_acct_list().unwrap_or_default();
-                let cur_acct = get_current_acct().unwrap_or_else(|_| "Unknown".to_string());
-                let serve_entries = get_serve_status().unwrap_or_default();
-                let advertised_routes = get_advertised_routes().unwrap_or_default();
-                let lock_status = get_lock_status().ok();
-
-                // Auto-connect if configured
-                if preferences.auto_connect && !connect {
-                    let _ = tailscale_int_up(true);
-                }
-
-                (ssh, routes, connect, magic_dns, ip_v4, ip_v6, device_options, devices,
-                 allow_lan, is_exit_node, avail_exit_nodes, acct_list, cur_acct,
-                 serve_entries, advertised_routes, lock_status)
-            } else {
-                (false, false, false, true,
-                 "N/A".to_string(), "N/A".to_string(),
-                 vec!["Select".to_string()], Vec::new(),
-                 false, false, vec!["None".to_string()],
-                 Vec::new(), "Unknown".to_string(),
-                 Vec::new(), Vec::new(), None)
-            };
-
-        let device_count = devices.len();
-
-        let mut window = Window {
+        let window = Window {
             core,
             config: Config::new(APP_ID, CONFIG_VERS).unwrap(),
+            client: client.clone(),
             popup: None,
             health,
 
-            ssh,
-            routes,
-            connect,
-            magic_dns,
-            ip_v4,
-            ip_v6,
+            state: TailscaleState::default(),
 
-            device_options,
-            selected_device: DEFAULT_EXIT_NODE.to_string(),
             selected_device_idx: Some(0),
+            selected_device_name: "Select".to_string(),
             send_files: Vec::new(),
             send_file_status: String::new(),
             files_sent: false,
             receive_file_status: String::new(),
 
-            avail_exit_nodes,
-            sel_exit_node: DEFAULT_EXIT_NODE.to_string(),
+            exit_node_names: vec!["None".to_string()],
             sel_exit_node_idx: preferences.exit_node_idx,
-            allow_lan,
-            is_exit_node,
 
-            acct_list,
-            cur_acct,
+            acct_names: Vec::new(),
 
-            devices,
             selected_device_detail_idx: None,
             ping_result: None,
             ping_in_progress: false,
 
-            serve_entries,
-            serve_port_input: String::new(),
-            serve_path_input: String::new(),
-
-            advertised_routes,
             subnet_input: String::new(),
-
-            lock_status,
 
             preferences,
             active_tab: Tab::Status,
-            previous_connect_state: connect,
-            previous_device_count: device_count,
+            previous_connect_state: false,
+            previous_device_count: 0,
             notifications_initialized: false,
+            initial_load_done: false,
         };
 
-        (window, Task::none())
+        // Kick off the initial async state load
+        let init_client = client;
+        let task = cosmic::task::future(async move {
+            match logic::fetch_state(&init_client).await {
+                Ok(state) => Message::StateLoaded(Ok(state)),
+                Err(e) => Message::StateLoaded(Err(e.to_string())),
+            }
+        });
+
+        (window, task)
     }
 
     fn on_close_requested(&self, id: window::Id) -> Option<Message> {
         Some(Message::PopupClosed(id))
     }
 
-    // ── Subscription for periodic polling ──
     fn subscription(&self) -> Subscription<Self::Message> {
         if !matches!(self.health, AppHealth::Healthy) {
             return Subscription::none();
@@ -400,7 +277,7 @@ impl cosmic::Application for Window {
 
     fn update(&mut self, message: Self::Message) -> Task<Action<Self::Message>> {
         match message {
-            // ─── Popup Management ────────────────────────────────────
+            // ─── Popup ───────────────────────────────────────────────
             Message::TogglePopup => {
                 return if let Some(p) = self.popup.take() {
                     self.receive_file_status = String::new();
@@ -426,144 +303,166 @@ impl cosmic::Application for Window {
                 }
             }
 
-            // ─── Tab Navigation ──────────────────────────────────────
+            // ─── Tabs ────────────────────────────────────────────────
             Message::SwitchTab(tab) => {
                 self.active_tab = tab;
-                // Refresh data when switching to certain tabs
-                match tab {
-                    Tab::Serve => {
-                        self.serve_entries = get_serve_status().unwrap_or_default();
-                    }
-                    Tab::Subnets => {
-                        self.advertised_routes = get_advertised_routes().unwrap_or_default();
-                    }
-                    Tab::Devices => {
-                        self.devices = get_device_details().unwrap_or_default();
-                    }
-                    _ => {}
-                }
             }
 
-            // ─── Periodic Polling ────────────────────────────────────
+            // ─── Polling ─────────────────────────────────────────────
             Message::Tick => {
-                return cosmic::task::future(async {
-                    let connected = get_tailscale_con_status().unwrap_or(false);
-                    let ip_v4 = get_tailscale_ip().unwrap_or_else(|_| "N/A".into());
-                    let ip_v6 = get_tailscale_ipv6().unwrap_or_else(|_| "N/A".into());
-                    let ssh = get_tailscale_ssh_status().unwrap_or(false);
-                    let routes = get_tailscale_routes_status().unwrap_or(false);
-                    let magic_dns = get_magic_dns_status().unwrap_or(true);
-                    let devices = get_device_details().unwrap_or_default();
-                    let device_names = get_tailscale_devices()
-                        .unwrap_or_else(|_| vec!["Select".to_string()]);
-                    let is_exit_node = get_is_exit_node().unwrap_or(false);
-
-                    Message::TickResult(TickData {
-                        connected,
-                        ip_v4,
-                        ip_v6,
-                        ssh,
-                        routes,
-                        magic_dns,
-                        devices,
-                        device_names,
-                        is_exit_node,
-                    })
+                let client = self.client.clone();
+                return cosmic::task::future(async move {
+                    match logic::fetch_state(&client).await {
+                        Ok(state) => Message::StateLoaded(Ok(state)),
+                        Err(e) => Message::StateLoaded(Err(e.to_string())),
+                    }
                 });
             }
-            Message::TickResult(data) => {
-                // Check for connection change notifications
-                if self.notifications_initialized
-                    && self.preferences.notifications_enabled
-                    && self.preferences.notify_on_connection_change
-                    && data.connected != self.previous_connect_state
-                {
-                    notifications::notify_connection_change(data.connected);
-                }
+            Message::StateLoaded(result) => {
+                match result {
+                    Ok(new_state) => {
+                        // Notifications for state changes
+                        if self.notifications_initialized
+                            && self.preferences.notifications_enabled
+                        {
+                            if self.preferences.notify_on_connection_change
+                                && new_state.connected != self.previous_connect_state
+                            {
+                                notifications::notify_connection_change(new_state.connected);
+                            }
 
-                // Check for new device notifications
-                if self.notifications_initialized
-                    && self.preferences.notifications_enabled
-                    && self.preferences.notify_on_new_device
-                    && data.devices.len() > self.previous_device_count
-                {
-                    let new_devices: Vec<&DeviceInfo> = data
-                        .devices
-                        .iter()
-                        .filter(|d| !self.devices.iter().any(|existing| existing.name == d.name))
-                        .collect();
-                    for dev in new_devices {
-                        notifications::notify_new_device(&dev.name);
+                            if self.preferences.notify_on_new_device
+                                && new_state.devices.len() > self.previous_device_count
+                            {
+                                for dev in &new_state.devices {
+                                    if !self.state.devices.iter().any(|d| d.id == dev.id) {
+                                        notifications::notify_new_device(&dev.name);
+                                    }
+                                }
+                            }
+
+                            if self.preferences.notify_on_incoming_files
+                                && !new_state.waiting_files.is_empty()
+                            {
+                                notifications::notify_incoming_files();
+                            }
+                        }
+
+                        self.previous_connect_state = new_state.connected;
+                        self.previous_device_count = new_state.devices.len();
+                        self.notifications_initialized = true;
+
+                        // Update derived UI state
+                        self.acct_names = new_state
+                            .accounts
+                            .iter()
+                            .map(|a| a.name.clone())
+                            .collect();
+
+                        // Exit node dropdown names
+                        let mut en_names = vec!["None".to_string()];
+                        for dev in &new_state.exit_node_options {
+                            en_names.push(dev.name.clone());
+                        }
+                        self.exit_node_names = en_names;
+
+                        // Auto-connect on first load if configured
+                        if !self.initial_load_done
+                            && self.preferences.auto_connect
+                            && !new_state.connected
+                        {
+                            let client = self.client.clone();
+                            self.initial_load_done = true;
+                            self.state = new_state;
+                            return cosmic::task::future(async move {
+                                let _ = logic::set_connected(&client, true).await;
+                                Message::ActionCompleted(Ok(()))
+                            });
+                        }
+
+                        self.initial_load_done = true;
+                        self.state = new_state;
+                    }
+                    Err(e) => {
+                        if e.contains("not found") || e.contains("Socket") {
+                            self.health = AppHealth::SocketNotFound;
+                        } else if e.contains("operator") || e.contains("403") {
+                            self.health = AppHealth::OperatorNotSet;
+                        } else {
+                            self.health = AppHealth::Error(e);
+                        }
                     }
                 }
-
-                self.previous_connect_state = data.connected;
-                self.previous_device_count = data.devices.len();
-                self.notifications_initialized = true;
-
-                self.connect = data.connected;
-                self.ip_v4 = data.ip_v4;
-                self.ip_v6 = data.ip_v6;
-                self.ssh = data.ssh;
-                self.routes = data.routes;
-                self.magic_dns = data.magic_dns;
-                self.devices = data.devices;
-                self.device_options = data.device_names;
-                self.is_exit_node = data.is_exit_node;
             }
 
             // ─── Connection Controls ─────────────────────────────────
             Message::EnableSSH(enabled) => {
-                self.ssh = enabled;
-                let _ = set_ssh(self.ssh);
-                update_config(self.config.clone(), "ssh-enabled", self.ssh);
+                let client = self.client.clone();
+                return cosmic::task::future(async move {
+                    let _ = logic::set_ssh(&client, enabled).await;
+                    Message::ActionCompleted(Ok(()))
+                });
             }
             Message::AcceptRoutes(accepted) => {
-                self.routes = accepted;
-                let _ = set_routes(self.routes);
-                update_config(self.config.clone(), "routes-accepted", self.routes);
+                let client = self.client.clone();
+                return cosmic::task::future(async move {
+                    let _ = logic::set_routes(&client, accepted).await;
+                    Message::ActionCompleted(Ok(()))
+                });
             }
-            Message::ConnectDisconnect(connection) => {
-                self.connect = connection;
-                let _ = tailscale_int_up(self.connect);
-
-                if self.preferences.notifications_enabled
-                    && self.preferences.notify_on_connection_change
-                {
-                    notifications::notify_connection_change(self.connect);
-                }
+            Message::ConnectDisconnect(connected) => {
+                let client = self.client.clone();
+                let notify = self.preferences.notifications_enabled
+                    && self.preferences.notify_on_connection_change;
+                return cosmic::task::future(async move {
+                    let _ = logic::set_connected(&client, connected).await;
+                    if notify {
+                        notifications::notify_connection_change(connected);
+                    }
+                    Message::ActionCompleted(Ok(()))
+                });
             }
             Message::ToggleMagicDns(enabled) => {
-                self.magic_dns = enabled;
-                let _ = set_magic_dns(self.magic_dns);
+                let client = self.client.clone();
+                return cosmic::task::future(async move {
+                    let _ = logic::set_magic_dns(&client, enabled).await;
+                    Message::ActionCompleted(Ok(()))
+                });
             }
 
-            // ─── Account Management ─────────────────────────────────
-            Message::SwitchAccount(new_acct) => {
-                self.cur_acct = self.acct_list[new_acct].clone();
-                let _ = switch_accounts(self.cur_acct.clone());
-
-                // Refresh state for new account
-                self.ssh = get_tailscale_ssh_status().unwrap_or(false);
-                self.routes = get_tailscale_routes_status().unwrap_or(false);
-                self.device_options = get_tailscale_devices()
-                    .unwrap_or_else(|_| vec!["Select".to_string()]);
-                self.avail_exit_nodes = get_avail_exit_nodes()
-                    .unwrap_or_else(|_| vec!["None".to_string()]);
-                self.devices = get_device_details().unwrap_or_default();
-
-                if self.preferences.notifications_enabled {
-                    notifications::notify_account_switched(&self.cur_acct);
+            // ─── Accounts ────────────────────────────────────────────
+            Message::SwitchAccount(idx) => {
+                if let Some(acct) = self.state.accounts.get(idx) {
+                    let client = self.client.clone();
+                    let profile_id = acct.id.clone();
+                    let acct_name = acct.name.clone();
+                    let notify = self.preferences.notifications_enabled;
+                    return cosmic::task::future(async move {
+                        let _ = logic::switch_account(&client, &profile_id).await;
+                        if notify {
+                            notifications::notify_account_switched(&acct_name);
+                        }
+                        Message::ActionCompleted(Ok(()))
+                    });
                 }
             }
             Message::LoginNewAccount => {
-                let _ = login_new_account();
+                let client = self.client.clone();
+                return cosmic::task::future(async move {
+                    let _ = logic::login_new_account(&client).await;
+                    Message::ActionCompleted(Ok(()))
+                });
             }
 
             // ─── Tail Drop ───────────────────────────────────────────
-            Message::DeviceSelected(device) => {
-                self.selected_device = self.device_options[device].clone();
-                self.selected_device_idx = Some(device);
+            Message::DeviceSelected(idx) => {
+                self.selected_device_idx = Some(idx);
+                self.selected_device_name = self
+                    .state
+                    .device_names
+                    .get(idx)
+                    .cloned()
+                    .unwrap_or_else(|| "Select".to_string());
                 if self.files_sent {
                     self.files_sent = false;
                 }
@@ -576,27 +475,22 @@ impl cosmic::Application for Window {
                         .filter(file_filter);
 
                     match dialog.open_files().await {
-                        Ok(file_responses) => {
-                            Message::FilesSelected(file_responses.urls().to_vec())
-                        }
+                        Ok(responses) => Message::FilesSelected(responses.urls().to_vec()),
                         Err(file_chooser::Error::Cancelled) => Message::FileChoosingCancelled,
                         Err(e) => {
-                            eprintln!("Choosing a file or files went wrong: {e}");
+                            eprintln!("File chooser error: {e}");
                             Message::FileChoosingCancelled
                         }
                     }
                 });
             }
             Message::FilesSelected(urls) => {
-                for url in urls.iter() {
-                    let path = match url.to_file_path() {
-                        Ok(good_path) => good_path,
-                        Err(_) => PathBuf::new(),
-                    };
-
-                    if path.exists() {
-                        if let Some(f_path) = path.as_path().to_str() {
-                            self.send_files.push(Some(String::from(f_path)));
+                for url in &urls {
+                    if let Ok(path) = url.to_file_path() {
+                        if path.exists() {
+                            if let Some(s) = path.to_str() {
+                                self.send_files.push(s.to_string());
+                            }
                         }
                     }
                 }
@@ -604,33 +498,40 @@ impl cosmic::Application for Window {
                 return self.reopen_popup();
             }
             Message::SendFiles => {
-                let files = self.send_files.clone();
-                let dev = self.selected_device.clone();
-
-                if dev != "Select" {
+                if self.selected_device_name != "Select" && !self.send_files.is_empty() {
                     self.files_sent = true;
-                    let file_count = files.len();
+                    let client = self.client.clone();
+                    let files = self.send_files.clone();
+                    let dev_name = self.selected_device_name.clone();
                     let notify = self.preferences.notifications_enabled;
-                    let dev_clone = dev.clone();
+
+                    // Find the peer ID for the selected device
+                    let peer_id = self
+                        .state
+                        .devices
+                        .iter()
+                        .find(|d| d.name == dev_name)
+                        .map(|d| d.id.clone())
+                        .unwrap_or_default();
+
+                    let file_count = files.len();
+
                     return cosmic::task::future(async move {
-                        let tx_status = tailscale_send(files, &dev).await;
-                        if notify && tx_status.is_none() {
-                            notifications::notify_files_sent(&dev_clone, file_count);
+                        let result = logic::send_files(&client, &peer_id, &files).await;
+                        if notify && result.is_none() {
+                            notifications::notify_files_sent(&dev_name, file_count);
                         }
-                        Message::FilesSent(tx_status)
+                        Message::FilesSent(result)
                     });
                 }
             }
             Message::FilesSent(tx_status) => {
                 self.send_file_status = match tx_status {
-                    Some(err_val) => err_val,
-                    None => String::from("File(s) sent successfully!"),
+                    Some(err) => err,
+                    None => "File(s) sent successfully!".to_string(),
                 };
-
                 if !self.send_file_status.is_empty() {
-                    if !self.send_files.is_empty() {
-                        self.send_files.clear();
-                    }
+                    self.send_files.clear();
                     return cosmic::task::future(async move { Message::ClearTailDropStatus });
                 }
             }
@@ -638,22 +539,33 @@ impl cosmic::Application for Window {
                 return self.reopen_popup();
             }
             Message::ReceiveFiles => {
-                let download_dir = self.preferences.download_dir.clone();
+                let client = self.client.clone();
+                let download_dir = self
+                    .preferences
+                    .download_dir
+                    .clone()
+                    .unwrap_or_else(default_download_dir);
                 let notify = self.preferences.notifications_enabled
                     && self.preferences.notify_on_incoming_files;
 
                 return cosmic::task::future(async move {
-                    let rx_status = tailscale_receive(download_dir.clone()).await;
-                    if notify && !rx_status.contains("error") && !rx_status.contains("Failed") {
-                        notifications::notify_files_received(
-                            &download_dir.unwrap_or_else(|| "~/Downloads".to_string()),
-                        );
+                    match logic::receive_files(&client, &download_dir).await {
+                        Ok(names) => {
+                            if notify {
+                                notifications::notify_files_received(&download_dir);
+                            }
+                            Message::FilesReceived(format!(
+                                "Received {} file(s) in {}",
+                                names.len(),
+                                download_dir
+                            ))
+                        }
+                        Err(e) => Message::FilesReceived(e),
                     }
-                    Message::FilesReceived(rx_status)
                 });
             }
-            Message::FilesReceived(rx_status) => {
-                self.receive_file_status = rx_status;
+            Message::FilesReceived(status) => {
+                self.receive_file_status = status;
                 if !self.receive_file_status.is_empty() {
                     return cosmic::task::future(async move { Message::ClearTailDropStatus });
                 }
@@ -661,59 +573,61 @@ impl cosmic::Application for Window {
             Message::ClearTailDropStatus => {
                 if !self.receive_file_status.is_empty() {
                     return cosmic::task::future(async move {
-                        Message::FilesReceived(
-                            match clear_status(STATUS_CLEAR_TIME).await {
-                                Some(bad) => format!("Status clear error: {bad}"),
-                                None => String::new(),
-                            }
-                        )
+                        clear_status(STATUS_CLEAR_TIME).await;
+                        Message::FilesReceived(String::new())
                     });
                 } else if !self.send_file_status.is_empty() || self.files_sent {
                     self.selected_device_idx = Some(0);
-                    self.selected_device = self.device_options[0].clone();
+                    self.selected_device_name = "Select".to_string();
                     return cosmic::task::future(async move {
-                        Message::FilesSent(
-                            match clear_status(STATUS_CLEAR_TIME).await {
-                                Some(bad) => Some(format!("Status clear error: {bad}")),
-                                None => Some(String::new()),
-                            }
-                        )
+                        clear_status(STATUS_CLEAR_TIME).await;
+                        Message::FilesSent(Some(String::new()))
                     });
                 }
             }
 
             // ─── Exit Node ───────────────────────────────────────────
-            Message::ExitNodeSelected(exit_node) => {
-                if !self.is_exit_node {
-                    self.sel_exit_node = self.avail_exit_nodes[exit_node].clone();
-                    self.sel_exit_node_idx = Some(exit_node);
+            Message::ExitNodeSelected(idx) => {
+                if !self.state.is_exit_node {
+                    self.sel_exit_node_idx = Some(idx);
+                    let client = self.client.clone();
 
-                    if exit_node == 0 {
-                        let _ = set_exit_node(String::new());
+                    let node_ip = if idx == 0 {
+                        String::new()
                     } else {
-                        let _ = set_exit_node(self.sel_exit_node.clone());
-                    }
+                        self.state
+                            .exit_node_options
+                            .get(idx - 1)
+                            .and_then(|d| d.tailscale_ips.first())
+                            .cloned()
+                            .unwrap_or_default()
+                    };
 
-                    update_config(
-                        self.config.clone(),
-                        "exit-node",
-                        self.sel_exit_node_idx.unwrap_or(0),
-                    );
+                    update_config(self.config.clone(), "exit-node", idx);
+
+                    return cosmic::task::future(async move {
+                        let _ = logic::set_exit_node(&client, &node_ip).await;
+                        Message::ActionCompleted(Ok(()))
+                    });
                 }
             }
             Message::AllowExitNodeLanAccess(allow) => {
-                self.allow_lan = allow;
-                if self.is_exit_node {
-                    let _ = exit_node_allow_lan_access(self.allow_lan);
-                    update_config(self.config.clone(), "allow-lan", self.allow_lan);
+                if self.state.is_exit_node {
+                    let client = self.client.clone();
+                    update_config(self.config.clone(), "allow-lan", allow);
+                    return cosmic::task::future(async move {
+                        let _ = logic::set_exit_node_allow_lan(&client, allow).await;
+                        Message::ActionCompleted(Ok(()))
+                    });
                 }
             }
-            Message::UpdateIsExitNode(is_exit) => {
+            Message::UpdateIsExitNode(enable) => {
                 if self.sel_exit_node_idx == Some(0) || self.sel_exit_node_idx.is_none() {
-                    self.is_exit_node = is_exit;
-                    let _ = enable_exit_node(self.is_exit_node);
-                    self.avail_exit_nodes = get_avail_exit_nodes()
-                        .unwrap_or_else(|_| vec!["None".to_string()]);
+                    let client = self.client.clone();
+                    return cosmic::task::future(async move {
+                        let _ = logic::set_advertise_exit_node(&client, enable).await;
+                        Message::ActionCompleted(Ok(()))
+                    });
                 }
             }
 
@@ -722,54 +636,22 @@ impl cosmic::Application for Window {
                 self.selected_device_detail_idx = Some(idx);
                 self.ping_result = None;
             }
-            Message::PingDevice(target) => {
+            Message::PingDevice(ip) => {
                 self.ping_in_progress = true;
+                let client = self.client.clone();
                 return cosmic::task::future(async move {
-                    match ping_device(target).await {
-                        Ok(result) => Message::PingResult(Ok(result)),
-                        Err(e) => Message::PingResult(Err(e.to_string())),
+                    match logic::ping_device(&client, &ip).await {
+                        Ok(pr) => Message::PingCompleted(Ok(pr)),
+                        Err(e) => Message::PingCompleted(Err(e.to_string())),
                     }
                 });
             }
-            Message::PingResult(result) => {
+            Message::PingCompleted(result) => {
                 self.ping_in_progress = false;
-                match result {
-                    Ok(pr) => self.ping_result = Some(pr),
-                    Err(e) => {
-                        eprintln!("Ping failed: {e}");
-                        self.ping_result = None;
-                    }
-                }
+                self.ping_result = result.ok();
             }
             Message::CopyToClipboard(value) => {
                 let _ = copy_to_clipboard(&value);
-            }
-
-            // ─── Serve & Funnel ──────────────────────────────────────
-            Message::ServePortInput(val) => {
-                self.serve_port_input = val;
-            }
-            Message::ServePathInput(val) => {
-                self.serve_path_input = val;
-            }
-            Message::AddServe => {
-                if let Ok(port) = self.serve_port_input.parse::<u16>() {
-                    let _ = add_serve(port, &self.serve_path_input);
-                    self.serve_entries = get_serve_status().unwrap_or_default();
-                    self.serve_port_input.clear();
-                    self.serve_path_input.clear();
-                }
-            }
-            Message::RemoveServe(path) => {
-                let _ = remove_serve(&path);
-                self.serve_entries = get_serve_status().unwrap_or_default();
-            }
-            Message::ToggleFunnel(port, enable) => {
-                let _ = toggle_funnel(port, enable);
-                self.serve_entries = get_serve_status().unwrap_or_default();
-            }
-            Message::RefreshServe => {
-                self.serve_entries = get_serve_status().unwrap_or_default();
             }
 
             // ─── Subnets ─────────────────────────────────────────────
@@ -778,19 +660,25 @@ impl cosmic::Application for Window {
             }
             Message::AddSubnet => {
                 if !self.subnet_input.is_empty() {
-                    let mut routes = self.advertised_routes.clone();
+                    let mut routes = self.state.advertised_routes.clone();
                     routes.push(self.subnet_input.clone());
-                    let _ = set_advertised_routes(&routes);
-                    self.advertised_routes = get_advertised_routes().unwrap_or_default();
                     self.subnet_input.clear();
+                    let client = self.client.clone();
+                    return cosmic::task::future(async move {
+                        let _ = logic::set_advertised_routes(&client, routes).await;
+                        Message::ActionCompleted(Ok(()))
+                    });
                 }
             }
             Message::RemoveSubnet(idx) => {
-                if idx < self.advertised_routes.len() {
-                    let mut routes = self.advertised_routes.clone();
+                if idx < self.state.advertised_routes.len() {
+                    let mut routes = self.state.advertised_routes.clone();
                     routes.remove(idx);
-                    let _ = set_advertised_routes(&routes);
-                    self.advertised_routes = get_advertised_routes().unwrap_or_default();
+                    let client = self.client.clone();
+                    return cosmic::task::future(async move {
+                        let _ = logic::set_advertised_routes(&client, routes).await;
+                        Message::ActionCompleted(Ok(()))
+                    });
                 }
             }
 
@@ -818,7 +706,11 @@ impl cosmic::Application for Window {
             Message::SetPollInterval(val) => {
                 if let Ok(secs) = val.parse::<u64>() {
                     self.preferences.poll_interval_secs = secs.max(5);
-                    update_config(self.config.clone(), "poll-interval", self.preferences.poll_interval_secs);
+                    update_config(
+                        self.config.clone(),
+                        "poll-interval",
+                        self.preferences.poll_interval_secs,
+                    );
                 }
             }
             Message::SetIconStyle(dynamic) => {
@@ -827,17 +719,18 @@ impl cosmic::Application for Window {
                 } else {
                     "static".to_string()
                 };
-                update_config(self.config.clone(), "icon-style", self.preferences.icon_style.clone());
+                update_config(
+                    self.config.clone(),
+                    "icon-style",
+                    self.preferences.icon_style.clone(),
+                );
             }
             Message::ChooseDownloadDir => {
                 return cosmic::task::future(async move {
                     let dialog = file_chooser::open::Dialog::new()
                         .title("Choose download directory");
-
                     match dialog.open_folders().await {
-                        Ok(responses) => {
-                            Message::DownloadDirSelected(responses.urls().to_vec())
-                        }
+                        Ok(r) => Message::DownloadDirSelected(r.urls().to_vec()),
                         Err(_) => Message::DownloadDirCancelled,
                     }
                 });
@@ -855,36 +748,28 @@ impl cosmic::Application for Window {
             Message::DownloadDirCancelled => {
                 return self.reopen_popup();
             }
+
+            // ─── Generic completion ──────────────────────────────────
+            Message::ActionCompleted(_) => {
+                // State will be refreshed on next tick
+            }
         }
         Task::none()
     }
 
-    // ── Panel icon (dynamic based on connection status) ──
     fn view(&self) -> Element<'_, Self::Message> {
-        let icon_name = if self.preferences.icon_style == "dynamic" {
-            if self.connect {
-                "tailscale-icon" // connected
-            } else {
-                "tailscale-icon" // TODO: add disconnected icon variant
-            }
-        } else {
-            "tailscale-icon"
-        };
-
         self.core
             .applet
-            .icon_button(icon_name)
+            .icon_button("tailscale-icon")
             .on_press(Message::TogglePopup)
             .into()
     }
 
     fn view_window(&self, _id: Id) -> Element<'_, Self::Message> {
-        // If the applet is not healthy, show an error message
         if !matches!(self.health, AppHealth::Healthy) {
             return self.view_unhealthy();
         }
 
-        // ── Tab bar ──
         let tab_bar = row(
             Tab::all()
                 .iter()
@@ -906,23 +791,15 @@ impl cosmic::Application for Window {
         .spacing(4)
         .align_y(Alignment::Center);
 
-        // ── Tab content ──
         let content = match self.active_tab {
             Tab::Status => self.view_status_tab(),
             Tab::TailDrop => self.view_taildrop_tab(),
             Tab::ExitNode => self.view_exit_node_tab(),
             Tab::Devices => self.view_devices_tab(),
-            Tab::Serve => self.view_serve_tab(),
-            Tab::Subnets => self.view_subnets_tab(),
             Tab::Settings => self.view_settings_tab(),
         };
 
-        let full_content = column![
-            tab_bar,
-            content,
-        ]
-        .spacing(8)
-        .padding(8);
+        let full_content = column![tab_bar, content].spacing(8).padding(8);
 
         self.core
             .applet
@@ -934,7 +811,6 @@ impl cosmic::Application for Window {
 // ─── View Helpers ────────────────────────────────────────────────────────────
 
 impl Window {
-    /// Reopen the popup after a dialog closes.
     fn reopen_popup(&mut self) -> Task<Action<Message>> {
         let new_id = Id::unique();
         self.popup.replace(new_id);
@@ -950,20 +826,14 @@ impl Window {
         get_popup(popup_settings)
     }
 
-    /// View shown when Tailscale is not available.
     fn view_unhealthy(&self) -> Element<'_, Message> {
         let (title, body, hint) = match &self.health {
-            AppHealth::NotInstalled => (
-                "Tailscale Not Installed",
-                "The tailscale CLI tool was not found.",
-                "Install Tailscale: https://tailscale.com/download/linux",
-            ),
-            AppHealth::DaemonDown => (
-                "Tailscale Daemon Not Running",
-                "The tailscaled service is not running.",
+            AppHealth::SocketNotFound => (
+                "Tailscale Daemon Not Found",
+                "Cannot find the tailscaled socket.",
                 "Start it with: sudo systemctl start tailscaled",
             ),
-            AppHealth::NoOperator => (
+            AppHealth::OperatorNotSet => (
                 "Operator Permission Required",
                 "The tailscale operator is not set for your user.",
                 "Run: sudo tailscale set --operator=$USER",
@@ -988,44 +858,18 @@ impl Window {
         self.core.applet.popup_container(content).into()
     }
 
-    // ── Status Tab ──
     fn view_status_tab(&self) -> Element<'_, Message> {
-        let acct_list = &self.acct_list;
+        let st = &self.state;
+
         let mut sel_acct_idx = None;
-        for (idx, acct) in acct_list.iter().enumerate() {
-            if acct == &self.cur_acct {
+        for (idx, name) in self.acct_names.iter().enumerate() {
+            if *name == st.current_account {
                 sel_acct_idx = Some(idx);
                 break;
             }
         }
 
-        let conn_label = if self.connect {
-            "Connected"
-        } else {
-            "Disconnected"
-        };
-
-        // Lock status display
-        let lock_info: Element<'_, Message> = if let Some(ref lock) = self.lock_status {
-            if lock.enabled {
-                Element::from(column![
-                    row![settings::item(
-                        "Tailnet Lock",
-                        text(if lock.node_signed { "Enabled (signed)" } else { "Enabled (unsigned)" })
-                    )],
-                    row![settings::item(
-                        "Pending Signatures",
-                        text(format!("{}", lock.pending_signatures))
-                    )],
-                ].spacing(2))
-            } else {
-                Element::from(
-                    row![settings::item("Tailnet Lock", text("Disabled"))]
-                )
-            }
-        } else {
-            Element::from(text(""))
-        };
+        let conn_label = if st.connected { "Connected" } else { "Disconnected" };
 
         let content = list_column()
             .padding(5)
@@ -1033,7 +877,7 @@ impl Window {
             .add(settings::item(
                 "Account",
                 row![
-                    dropdown(acct_list, sel_acct_idx, Message::SwitchAccount),
+                    dropdown(&self.acct_names, sel_acct_idx, Message::SwitchAccount),
                     button::standard("New Login")
                         .on_press(Message::LoginNewAccount)
                         .width(Length::Shrink),
@@ -1043,10 +887,10 @@ impl Window {
             .add(settings::item(
                 "IPv4 Address",
                 row![
-                    text(self.ip_v4.clone()),
+                    text(&st.ip_v4),
                     button::icon(icon::from_name("edit-copy-symbolic"))
-                        .on_press(Message::CopyToClipboard(self.ip_v4.clone()))
-                        .tooltip("Copy to clipboard"),
+                        .on_press(Message::CopyToClipboard(st.ip_v4.clone()))
+                        .tooltip("Copy"),
                 ]
                 .spacing(8)
                 .align_y(Alignment::Center),
@@ -1054,82 +898,123 @@ impl Window {
             .add(settings::item(
                 "IPv6 Address",
                 row![
-                    text(self.ip_v6.clone()),
+                    text(&st.ip_v6),
                     button::icon(icon::from_name("edit-copy-symbolic"))
-                        .on_press(Message::CopyToClipboard(self.ip_v6.clone()))
-                        .tooltip("Copy to clipboard"),
+                        .on_press(Message::CopyToClipboard(st.ip_v6.clone()))
+                        .tooltip("Copy"),
                 ]
                 .spacing(8)
                 .align_y(Alignment::Center),
             ))
             .add(settings::item(
-                "Status",
-                text(conn_label),
+                "DNS Suffix",
+                row![
+                    text(&st.dns_suffix),
+                    button::icon(icon::from_name("edit-copy-symbolic"))
+                        .on_press(Message::CopyToClipboard(st.dns_suffix.clone()))
+                        .tooltip("Copy"),
+                ]
+                .spacing(8)
+                .align_y(Alignment::Center),
             ))
+            .add(settings::item("Status", text(conn_label)))
             .add(settings::item(
                 "Enable SSH",
-                toggler(self.ssh).on_toggle(Message::EnableSSH),
+                toggler(st.ssh_enabled).on_toggle(Message::EnableSSH),
             ))
             .add(settings::item(
                 "Accept Routes",
-                toggler(self.routes).on_toggle(Message::AcceptRoutes),
+                toggler(st.accept_routes).on_toggle(Message::AcceptRoutes),
             ))
             .add(settings::item(
                 "MagicDNS",
-                toggler(self.magic_dns).on_toggle(Message::ToggleMagicDns),
+                toggler(st.magic_dns).on_toggle(Message::ToggleMagicDns),
             ))
             .add(settings::item(
                 "Connected",
-                toggler(self.connect).on_toggle(Message::ConnectDisconnect),
-            ))
-            .add(lock_info);
+                toggler(st.connected).on_toggle(Message::ConnectDisconnect),
+            ));
 
-        Element::from(content)
+        // Subnet routes section
+        let mut subnets_section = column![text("Subnet Routes").size(14)].spacing(4).padding(4);
+
+        if st.advertised_routes.is_empty() {
+            subnets_section = subnets_section.push(text("No advertised subnet routes.").size(12));
+        } else {
+            for (idx, route) in st.advertised_routes.iter().enumerate() {
+                subnets_section = subnets_section.push(
+                    row![
+                        text(route).width(Length::Fill),
+                        button::destructive("Remove")
+                            .on_press(Message::RemoveSubnet(idx))
+                            .width(Length::Shrink),
+                    ]
+                    .spacing(8)
+                    .align_y(Alignment::Center),
+                );
+            }
+        }
+
+        subnets_section = subnets_section.push(
+            row![
+                text_input("CIDR (e.g. 192.168.1.0/24)", &self.subnet_input)
+                    .on_input(Message::SubnetInput)
+                    .width(250),
+                button::suggested("Add")
+                    .on_press(Message::AddSubnet)
+                    .width(Length::Shrink),
+            ]
+            .spacing(8)
+            .align_y(Alignment::Center),
+        );
+
+        Element::from(
+            column![Element::from(content), Element::from(subnets_section)]
+                .spacing(8),
+        )
     }
 
-    // ── Tail Drop Tab ──
     fn view_taildrop_tab(&self) -> Element<'_, Message> {
         let file_list_text = if self.send_files.is_empty() {
             "No files selected".to_string()
         } else {
             self.send_files
                 .iter()
-                .filter_map(|f| f.as_ref())
-                .map(|p| {
-                    p.rsplit('/')
-                        .next()
-                        .unwrap_or(p)
-                        .to_string()
-                })
+                .map(|p| p.rsplit('/').next().unwrap_or(p).to_string())
                 .collect::<Vec<_>>()
                 .join(", ")
         };
 
         let send_btn: Element<'_, Message> = if !self.send_files.is_empty()
-            && self.selected_device != *"Select"
+            && self.selected_device_name != "Select"
         {
             Element::from(
                 button::suggested("Send File(s)")
                     .on_press(Message::SendFiles)
-                    .width(150)
-                    .tooltip("Send the selected file(s)."),
+                    .width(150),
             )
         } else {
-            Element::from(
-                button::standard("Send File(s)")
-                    .width(150)
-                    .tooltip("Select a device and file(s) first."),
-            )
+            Element::from(button::standard("Send File(s)").width(150))
         };
 
         let status_text = if !self.send_file_status.is_empty() {
             self.send_file_status.clone()
-        } else if self.files_sent && self.selected_device != *"Select" {
+        } else if self.files_sent {
             "File(s) were sent successfully!".to_string()
-        } else if self.selected_device == *"Select" && !self.files_sent {
-            "Choose a device first, then select your file(s).".to_string()
+        } else if self.selected_device_name == "Select" && !self.send_files.is_empty() {
+            "Choose a device first.".to_string()
         } else {
             String::new()
+        };
+
+        // Waiting files indicator
+        let waiting_text = if self.state.waiting_files.is_empty() {
+            "No files waiting.".to_string()
+        } else {
+            format!(
+                "{} file(s) waiting in inbox",
+                self.state.waiting_files.len()
+            )
         };
 
         let content = list_column()
@@ -1138,7 +1023,7 @@ impl Window {
             .add(settings::item(
                 "Target Device",
                 dropdown(
-                    &self.device_options,
+                    &self.state.device_names,
                     self.selected_device_idx,
                     Message::DeviceSelected,
                 )
@@ -1152,30 +1037,25 @@ impl Window {
                 row![
                     button::standard("Select File(s)")
                         .on_press(Message::ChooseFiles)
-                        .width(150)
-                        .tooltip("Select file(s) to send."),
+                        .width(150),
                     horizontal_space().width(Length::Fill),
                     send_btn,
                 ]
                 .spacing(8)
                 .padding(8),
             ))
+            .add(settings::item("Inbox", text(waiting_text).size(12)))
             .add(Element::from(
                 row![
                     button::standard("Receive File(s)")
                         .on_press(Message::ReceiveFiles)
-                        .width(150)
-                        .tooltip("Receive files waiting in your Tail Drop inbox."),
+                        .width(150),
                 ]
                 .padding(8),
             ))
             .add(settings::item(
                 "Transfer Status",
-                column![
-                    text(status_text),
-                    text(self.receive_file_status.clone()),
-                ]
-                .spacing(2),
+                column![text(status_text), text(self.receive_file_status.clone())].spacing(2),
             ))
             .add(settings::item(
                 "Download Directory",
@@ -1190,16 +1070,14 @@ impl Window {
         Element::from(content)
     }
 
-    // ── Exit Node Tab ──
     fn view_exit_node_tab(&self) -> Element<'_, Message> {
-        let config_exit_node = self.sel_exit_node_idx;
+        let can_toggle_host = self.sel_exit_node_idx == Some(0)
+            || self.sel_exit_node_idx.is_none();
 
-        let host_exit_toggler: Element<'_, Message> = if config_exit_node == Some(0)
-            || config_exit_node.is_none()
-        {
+        let host_exit_toggler: Element<'_, Message> = if can_toggle_host {
             Element::from(
-                toggler(self.is_exit_node)
-                    .label(if self.is_exit_node {
+                toggler(self.state.is_exit_node)
+                    .label(if self.state.is_exit_node {
                         "Disable Host Exit Node"
                     } else {
                         "Enable Host Exit Node"
@@ -1207,22 +1085,17 @@ impl Window {
                     .on_toggle(Message::UpdateIsExitNode),
             )
         } else {
-            Element::from(
-                toggler(self.is_exit_node)
-                    .label("Enable Host Exit Node"),
-            )
+            Element::from(toggler(self.state.is_exit_node).label("Enable Host Exit Node"))
         };
 
-        let lan_toggler: Element<'_, Message> = if self.is_exit_node {
+        let lan_toggler: Element<'_, Message> = if self.state.is_exit_node {
             Element::from(
-                toggler(self.allow_lan)
+                toggler(self.state.exit_node_allow_lan)
                     .label("Allow LAN Access")
                     .on_toggle(Message::AllowExitNodeLanAccess),
             )
         } else {
-            Element::from(
-                toggler(self.allow_lan).label("Allow LAN Access"),
-            )
+            Element::from(toggler(self.state.exit_node_allow_lan).label("Allow LAN Access"))
         };
 
         let content = list_column()
@@ -1231,7 +1104,7 @@ impl Window {
             .add(settings::item(
                 "Selected Node",
                 dropdown(
-                    &self.avail_exit_nodes,
+                    &self.exit_node_names,
                     self.sel_exit_node_idx,
                     Message::ExitNodeSelected,
                 )
@@ -1246,44 +1119,47 @@ impl Window {
         Element::from(content)
     }
 
-    // ── Devices Tab ──
     fn view_devices_tab(&self) -> Element<'_, Message> {
         let mut device_list = list_column().padding(5).spacing(0);
 
-        for (idx, dev) in self.devices.iter().enumerate() {
-            let status_dot = if dev.online { "●" } else { "○" };
+        for (idx, dev) in self.state.devices.iter().enumerate() {
+            let dot = if dev.online { "●" } else { "○" };
             let self_label = if dev.is_self { " (this device)" } else { "" };
+            let ip = dev.tailscale_ips.first().map(|s| s.as_str()).unwrap_or("");
 
-            let label = format!(
-                "{status_dot} {}{self_label} — {} — {}",
-                dev.name, dev.os, dev.tailscale_ip
-            );
+            let label = format!("{dot} {}{self_label} — {} — {ip}", dev.name, dev.os);
 
-            device_list = device_list.add(
-                Element::from(
-                    button::text(label)
-                        .on_press(Message::SelectDeviceDetail(idx))
-                        .width(Length::Fill),
-                ),
-            );
+            device_list = device_list.add(Element::from(
+                button::text(label)
+                    .on_press(Message::SelectDeviceDetail(idx))
+                    .width(Length::Fill),
+            ));
         }
 
-        // Device detail panel
         let detail: Element<'_, Message> =
             if let Some(idx) = self.selected_device_detail_idx {
-                if let Some(dev) = self.devices.get(idx) {
+                if let Some(dev) = self.state.devices.get(idx) {
                     let tags_str = if dev.tags.is_empty() {
                         "None".to_string()
                     } else {
                         dev.tags.join(", ")
                     };
 
+                    let ip = dev
+                        .tailscale_ips
+                        .first()
+                        .cloned()
+                        .unwrap_or_else(|| "N/A".to_string());
+
                     let ping_section: Element<'_, Message> = if self.ping_in_progress {
                         Element::from(text("Pinging..."))
                     } else if let Some(ref pr) = self.ping_result {
-                        Element::from(
-                            text(format!("{:.1}ms via {}", pr.latency_ms, pr.via)),
-                        )
+                        let via = if pr.is_direct { "direct" } else { "relay" };
+                        Element::from(text(format!(
+                            "{:.1}ms ({})",
+                            pr.latency_seconds * 1000.0,
+                            via
+                        )))
                     } else {
                         Element::from(text(""))
                     };
@@ -1298,10 +1174,8 @@ impl Window {
                                 row![
                                     text(&dev.dns_name),
                                     button::icon(icon::from_name("edit-copy-symbolic"))
-                                        .on_press(Message::CopyToClipboard(
-                                            dev.dns_name.clone(),
-                                        ))
-                                        .tooltip("Copy DNS name"),
+                                        .on_press(Message::CopyToClipboard(dev.dns_name.clone()))
+                                        .tooltip("Copy"),
                                 ]
                                 .spacing(8)
                                 .align_y(Alignment::Center),
@@ -1309,12 +1183,10 @@ impl Window {
                             .add(settings::item(
                                 "IP Address",
                                 row![
-                                    text(&dev.tailscale_ip),
+                                    text(&ip),
                                     button::icon(icon::from_name("edit-copy-symbolic"))
-                                        .on_press(Message::CopyToClipboard(
-                                            dev.tailscale_ip.clone(),
-                                        ))
-                                        .tooltip("Copy IP"),
+                                        .on_press(Message::CopyToClipboard(ip.clone()))
+                                        .tooltip("Copy"),
                                 ]
                                 .spacing(8)
                                 .align_y(Alignment::Center),
@@ -1349,9 +1221,7 @@ impl Window {
                             .add(Element::from(
                                 row![
                                     button::standard("Ping")
-                                        .on_press(Message::PingDevice(
-                                            dev.name.clone(),
-                                        ))
+                                        .on_press(Message::PingDevice(ip.clone()))
                                         .tooltip("Ping this device"),
                                     ping_section,
                                 ]
@@ -1377,115 +1247,6 @@ impl Window {
         )
     }
 
-    // ── Serve Tab ──
-    fn view_serve_tab(&self) -> Element<'_, Message> {
-        let mut entries_list = list_column().padding(5).spacing(0);
-
-        if self.serve_entries.is_empty() {
-            entries_list = entries_list.add(
-                Element::from(text("No active serve entries.").size(14)),
-            );
-        } else {
-            for entry in &self.serve_entries {
-                let funnel_label = if entry.funnel { " (Funnel)" } else { "" };
-                let label = format!(
-                    "{} → {}{funnel_label}",
-                    entry.path, entry.local_addr
-                );
-                entries_list = entries_list.add(
-                    Element::from(
-                        row![
-                            text(label).width(Length::Fill),
-                            button::destructive("Remove")
-                                .on_press(Message::RemoveServe(entry.path.clone()))
-                                .width(Length::Shrink),
-                        ]
-                        .spacing(8)
-                        .padding(4)
-                        .align_y(Alignment::Center),
-                    ),
-                );
-            }
-        }
-
-        let content = column![
-            text("Tailscale Serve").size(16),
-            Element::from(entries_list),
-            text("Add New Serve Entry").size(14),
-            row![
-                text_input("Port (e.g. 3000)", &self.serve_port_input)
-                    .on_input(Message::ServePortInput)
-                    .width(120),
-                text_input("Path (e.g. /)", &self.serve_path_input)
-                    .on_input(Message::ServePathInput)
-                    .width(120),
-                button::suggested("Add")
-                    .on_press(Message::AddServe)
-                    .width(Length::Shrink),
-            ]
-            .spacing(8)
-            .align_y(Alignment::Center),
-            row![
-                button::standard("Refresh")
-                    .on_press(Message::RefreshServe)
-                    .width(Length::Shrink),
-            ]
-            .padding(4),
-        ]
-        .spacing(8)
-        .padding(4);
-
-        Element::from(content)
-    }
-
-    // ── Subnets Tab ──
-    fn view_subnets_tab(&self) -> Element<'_, Message> {
-        let mut routes_list = list_column().padding(5).spacing(0);
-
-        if self.advertised_routes.is_empty() {
-            routes_list = routes_list.add(
-                Element::from(text("No advertised subnet routes.").size(14)),
-            );
-        } else {
-            for (idx, route) in self.advertised_routes.iter().enumerate() {
-                routes_list = routes_list.add(
-                    Element::from(
-                        row![
-                            text(route).width(Length::Fill),
-                            button::destructive("Remove")
-                                .on_press(Message::RemoveSubnet(idx))
-                                .width(Length::Shrink),
-                        ]
-                        .spacing(8)
-                        .padding(4)
-                        .align_y(Alignment::Center),
-                    ),
-                );
-            }
-        }
-
-        let content = column![
-            text("Subnet Routes").size(16),
-            Element::from(routes_list),
-            text("Add Subnet Route").size(14),
-            row![
-                text_input("CIDR (e.g. 192.168.1.0/24)", &self.subnet_input)
-                    .on_input(Message::SubnetInput)
-                    .width(250),
-                button::suggested("Add")
-                    .on_press(Message::AddSubnet)
-                    .width(Length::Shrink),
-            ]
-            .spacing(8)
-            .align_y(Alignment::Center),
-        ]
-        .spacing(8)
-        .padding(4);
-
-        Element::from(content)
-    }
-
-    // ── Settings Tab ──
     fn view_settings_tab(&self) -> Element<'_, Message> {
         let download_dir_display = self
             .preferences
@@ -1498,8 +1259,7 @@ impl Window {
             .spacing(0)
             .add(settings::item(
                 "Auto-connect on startup",
-                toggler(self.preferences.auto_connect)
-                    .on_toggle(Message::SetAutoConnect),
+                toggler(self.preferences.auto_connect).on_toggle(Message::SetAutoConnect),
             ))
             .add(settings::item(
                 "Dynamic panel icon",
