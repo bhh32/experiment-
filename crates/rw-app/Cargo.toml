@@ -1,0 +1,55 @@
+[package]
+name = "rw-app"
+description = "Rust Writer - A modern professional-grade word processor built with libcosmic"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "rust-writer"
+path = "src/main.rs"
+
+[dependencies]
+# UI framework
+libcosmic = { workspace = true }
+
+# Core crates
+rw-document = { workspace = true }
+rw-editor = { workspace = true }
+rw-layout = { workspace = true }
+rw-render = { workspace = true }
+rw-styles = { workspace = true }
+rw-undo = { workspace = true }
+
+# Feature crates
+rw-tables = { workspace = true }
+rw-media = { workspace = true }
+rw-fields = { workspace = true }
+rw-find = { workspace = true }
+rw-spell = { workspace = true }
+rw-track = { workspace = true }
+rw-mail-merge = { workspace = true }
+rw-print = { workspace = true }
+
+# Format crates
+rw-format-odf = { workspace = true }
+rw-format-ooxml = { workspace = true }
+rw-format-rtf = { workspace = true }
+rw-format-html = { workspace = true }
+rw-format-epub = { workspace = true }
+rw-format-txt = { workspace = true }
+
+# UI crates
+rw-ribbon = { workspace = true }
+rw-widgets = { workspace = true }
+rw-command-palette = { workspace = true }
+
+# Utilities
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+anyhow = { workspace = true }
+log = { workspace = true }
+env_logger = { workspace = true }
+tokio = { workspace = true }
+dirs = { workspace = true }

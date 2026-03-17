@@ -1,0 +1,141 @@
+[workspace]
+resolver = "2"
+members = [
+    # Main application
+    "crates/rw-app",
+
+    # Core engine
+    "crates/rw-document",
+    "crates/rw-editor",
+    "crates/rw-layout",
+    "crates/rw-render",
+    "crates/rw-styles",
+    "crates/rw-undo",
+
+    # Feature modules
+    "crates/rw-tables",
+    "crates/rw-media",
+    "crates/rw-fields",
+    "crates/rw-find",
+    "crates/rw-spell",
+    "crates/rw-track",
+    "crates/rw-mail-merge",
+    "crates/rw-print",
+
+    # File format I/O
+    "crates/rw-format-odf",
+    "crates/rw-format-ooxml",
+    "crates/rw-format-rtf",
+    "crates/rw-format-html",
+    "crates/rw-format-epub",
+    "crates/rw-format-txt",
+
+    # UI components
+    "crates/rw-ribbon",
+    "crates/rw-widgets",
+    "crates/rw-command-palette",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "GPL-3.0-or-later"
+authors = ["Rust Writer Contributors"]
+repository = "https://github.com/bhh32/experiment-"
+rust-version = "1.80"
+
+[workspace.dependencies]
+# COSMIC / iced UI framework
+libcosmic = { git = "https://github.com/pop-os/libcosmic.git", default-features = false, features = ["wgpu", "tokio", "winit"] }
+cosmic-text = "0.12"
+
+# Serialization
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# XML processing (for ODF/OOXML)
+quick-xml = { version = "0.36", features = ["serialize"] }
+xml-rs = "0.8"
+zip = "2"
+
+# Text processing
+unicode-segmentation = "1.11"
+unicode-bidi = "0.3"
+unicode-linebreak = "0.1"
+regex = "1"
+ropey = "1.6"  # Rope data structure for efficient text editing
+
+# Spell checking
+hunspell-rs = "0.4"
+
+# PDF generation
+printpdf = "0.7"
+lopdf = "0.33"
+
+# Image handling
+image = "0.25"
+resvg = "0.43"  # SVG rendering
+
+# HTML
+html5ever = "0.29"
+markup5ever = "0.14"
+
+# EPUB
+epub-builder = "0.7"
+
+# RTF
+# (custom implementation - no mature Rust RTF crate)
+
+# Printing (CUPS)
+cups = "0.2"
+
+# Async runtime
+tokio = { version = "1", features = ["full"] }
+
+# Error handling
+thiserror = "2"
+anyhow = "1"
+
+# Logging
+log = "0.4"
+env_logger = "0.11"
+
+# Date/time
+chrono = { version = "0.4", features = ["serde"] }
+
+# Unique identifiers
+uuid = { version = "1", features = ["v4", "serde"] }
+
+# File system
+dirs = "5"
+notify = "6"  # File watching
+
+# Internal workspace crates
+rw-document = { path = "crates/rw-document" }
+rw-editor = { path = "crates/rw-editor" }
+rw-layout = { path = "crates/rw-layout" }
+rw-render = { path = "crates/rw-render" }
+rw-styles = { path = "crates/rw-styles" }
+rw-undo = { path = "crates/rw-undo" }
+rw-tables = { path = "crates/rw-tables" }
+rw-media = { path = "crates/rw-media" }
+rw-fields = { path = "crates/rw-fields" }
+rw-find = { path = "crates/rw-find" }
+rw-spell = { path = "crates/rw-spell" }
+rw-track = { path = "crates/rw-track" }
+rw-mail-merge = { path = "crates/rw-mail-merge" }
+rw-print = { path = "crates/rw-print" }
+rw-format-odf = { path = "crates/rw-format-odf" }
+rw-format-ooxml = { path = "crates/rw-format-ooxml" }
+rw-format-rtf = { path = "crates/rw-format-rtf" }
+rw-format-html = { path = "crates/rw-format-html" }
+rw-format-epub = { path = "crates/rw-format-epub" }
+rw-format-txt = { path = "crates/rw-format-txt" }
+rw-ribbon = { path = "crates/rw-ribbon" }
+rw-widgets = { path = "crates/rw-widgets" }
+rw-command-palette = { path = "crates/rw-command-palette" }
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+strip = true

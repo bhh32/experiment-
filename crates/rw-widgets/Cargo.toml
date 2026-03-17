@@ -1,0 +1,11 @@
+[package]
+name = "rw-widgets"
+description = "Custom UI widgets for Rust Writer - rulers, color picker, style gallery, status bar"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+libcosmic = { workspace = true }
+rw-document = { workspace = true }

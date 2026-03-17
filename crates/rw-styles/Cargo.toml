@@ -1,0 +1,11 @@
+[package]
+name = "rw-styles"
+description = "Style system for Rust Writer - paragraph, character, page, list, table, and frame styles with inheritance"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+uuid = { workspace = true }

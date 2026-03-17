@@ -1,0 +1,15 @@
+[package]
+name = "rw-layout"
+description = "Document layout engine for Rust Writer - pagination, text flow, columns, line breaking"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+cosmic-text = { workspace = true }
+unicode-linebreak = { workspace = true }
+unicode-bidi = { workspace = true }
+rw-document = { workspace = true }
+rw-styles = { workspace = true }

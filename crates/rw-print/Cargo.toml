@@ -1,0 +1,15 @@
+[package]
+name = "rw-print"
+description = "Printing and PDF generation for Rust Writer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+printpdf = { workspace = true }
+lopdf = { workspace = true }
+rw-document = { workspace = true }
+rw-layout = { workspace = true }
+rw-render = { workspace = true }

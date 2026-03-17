@@ -1,0 +1,10 @@
+[package]
+name = "rw-undo"
+description = "Undo/redo system for Rust Writer using the command pattern"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }

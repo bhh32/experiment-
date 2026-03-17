@@ -1,0 +1,15 @@
+[package]
+name = "rw-editor"
+description = "Text editing engine for Rust Writer - cursor management, selection, input handling, clipboard"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+unicode-segmentation = { workspace = true }
+ropey = { workspace = true }
+rw-document = { workspace = true }
+rw-undo = { workspace = true }
+rw-styles = { workspace = true }

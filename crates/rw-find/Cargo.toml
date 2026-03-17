@@ -1,0 +1,12 @@
+[package]
+name = "rw-find"
+description = "Find and replace engine for Rust Writer with regex support"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+regex = { workspace = true }
+rw-document = { workspace = true }

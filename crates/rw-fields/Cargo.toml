@@ -1,0 +1,12 @@
+[package]
+name = "rw-fields"
+description = "Fields system for Rust Writer - page numbers, dates, cross-references, TOC, indexes, bookmarks"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+chrono = { workspace = true }
+rw-document = { workspace = true }

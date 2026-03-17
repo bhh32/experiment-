@@ -1,0 +1,12 @@
+[package]
+name = "rw-format-rtf"
+description = "RTF (Rich Text Format) reader/writer for Rust Writer"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+rw-document = { workspace = true }
+rw-styles = { workspace = true }

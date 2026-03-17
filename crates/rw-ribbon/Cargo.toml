@@ -1,0 +1,11 @@
+[package]
+name = "rw-ribbon"
+description = "Custom Ribbon widget for Rust Writer built on libcosmic/iced"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+libcosmic = { workspace = true }
+rw-document = { workspace = true }

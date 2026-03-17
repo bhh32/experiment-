@@ -1,0 +1,15 @@
+[package]
+name = "rw-document"
+description = "Core document model for Rust Writer - paragraphs, text runs, sections, pages, and the document object model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+uuid = { workspace = true }
+chrono = { workspace = true }
+ropey = { workspace = true }
+unicode-segmentation = { workspace = true }
+thiserror = { workspace = true }
+rw-styles = { workspace = true }

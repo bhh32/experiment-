@@ -1,0 +1,13 @@
+[package]
+name = "rw-media"
+description = "Image and media handling for Rust Writer - insertion, positioning, wrapping, anchoring, shapes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+serde = { workspace = true }
+thiserror = { workspace = true }
+image = { workspace = true }
+resvg = { workspace = true }
+rw-document = { workspace = true }
