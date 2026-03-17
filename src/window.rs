@@ -26,7 +26,6 @@ use std::fmt::Debug;
 use std::path::PathBuf;
 use url::Url;
 
-const DEFAULT_EXIT_NODE: &str = "Select Exit Node";
 const POPUP_MAX_WIDTH: f32 = 800.0;
 const POPUP_MIN_WIDTH: f32 = 640.0;
 const POPUP_MAX_HEIGHT: f32 = 1080.0;
@@ -45,13 +44,13 @@ pub enum Tab {
 }
 
 impl Tab {
-    fn label(&self) -> &'static str {
+    fn label(&self) -> String {
         match self {
-            Tab::Status => "Status",
-            Tab::TailDrop => "Tail Drop",
-            Tab::ExitNode => "Exit Node",
-            Tab::Devices => "Devices",
-            Tab::Settings => "Settings",
+            Tab::Status => fl!("tab-status"),
+            Tab::TailDrop => fl!("tab-taildrop"),
+            Tab::ExitNode => fl!("tab-exit-node"),
+            Tab::Devices => fl!("tab-devices"),
+            Tab::Settings => fl!("tab-settings"),
         }
     }
 
@@ -223,13 +222,13 @@ impl cosmic::Application for Window {
             state: TailscaleState::default(),
 
             selected_device_idx: Some(0),
-            selected_device_name: "Select".to_string(),
+            selected_device_name: fl!("select-default"),
             send_files: Vec::new(),
             send_file_status: String::new(),
             files_sent: false,
             receive_file_status: String::new(),
 
-            exit_node_names: vec!["None".to_string()],
+            exit_node_names: vec![fl!("none-default")],
             sel_exit_node_idx: preferences.exit_node_idx,
 
             acct_names: Vec::new(),
@@ -359,7 +358,7 @@ impl cosmic::Application for Window {
                             .collect();
 
                         // Exit node dropdown names
-                        let mut en_names = vec!["None".to_string()];
+                        let mut en_names = vec![fl!("none-default")];
                         for dev in &new_state.exit_node_options {
                             en_names.push(dev.name.clone());
                         }
@@ -461,7 +460,7 @@ impl cosmic::Application for Window {
                     .device_names
                     .get(idx)
                     .cloned()
-                    .unwrap_or_else(|| "Select".to_string());
+                    .unwrap_or_else(|| fl!("select-default"));
                 if self.files_sent {
                     self.files_sent = false;
                 }
@@ -469,8 +468,9 @@ impl cosmic::Application for Window {
             Message::ChooseFiles => {
                 return cosmic::task::future(async move {
                     let file_filter = FileFilter::new("Any").glob("*.*");
+                    let title = fl!("file-chooser-title");
                     let dialog = file_chooser::open::Dialog::new()
-                        .title("Choose a file or files...")
+                        .title(title)
                         .filter(file_filter);
 
                     match dialog.open_files().await {
@@ -497,7 +497,7 @@ impl cosmic::Application for Window {
                 return self.reopen_popup();
             }
             Message::SendFiles => {
-                if self.selected_device_name != "Select" && !self.send_files.is_empty() {
+                if self.selected_device_name != fl!("select-default") && !self.send_files.is_empty() {
                     self.files_sent = true;
                     let client = self.client.clone();
                     let files = self.send_files.clone();
@@ -527,7 +527,7 @@ impl cosmic::Application for Window {
             Message::FilesSent(tx_status) => {
                 self.send_file_status = match tx_status {
                     Some(err) => err,
-                    None => "File(s) sent successfully!".to_string(),
+                    None => fl!("taildrop-files-sent"),
                 };
                 if !self.send_file_status.is_empty() {
                     self.send_files.clear();
@@ -577,7 +577,7 @@ impl cosmic::Application for Window {
                     });
                 } else if !self.send_file_status.is_empty() || self.files_sent {
                     self.selected_device_idx = Some(0);
-                    self.selected_device_name = "Select".to_string();
+                    self.selected_device_name = fl!("select-default");
                     return cosmic::task::future(async move {
                         clear_status(STATUS_CLEAR_TIME).await;
                         Message::FilesSent(Some(String::new()))
@@ -726,8 +726,9 @@ impl cosmic::Application for Window {
             }
             Message::ChooseDownloadDir => {
                 return cosmic::task::future(async move {
+                    let title = fl!("dir-chooser-title");
                     let dialog = file_chooser::open::Dialog::new()
-                        .title("Choose download directory");
+                        .title(title);
                     match dialog.open_folders().await {
                         Ok(r) => Message::DownloadDirSelected(r.urls().to_vec()),
                         Err(_) => Message::DownloadDirCancelled,
@@ -828,19 +829,19 @@ impl Window {
     fn view_unhealthy(&self) -> Element<'_, Message> {
         let (title, body, hint) = match &self.health {
             AppHealth::SocketNotFound => (
-                "Tailscale Daemon Not Found",
-                "Cannot find the tailscaled socket.",
-                "Start it with: sudo systemctl start tailscaled",
+                fl!("health-daemon-down-title"),
+                fl!("health-daemon-down-body"),
+                fl!("health-daemon-down-hint"),
             ),
             AppHealth::OperatorNotSet => (
-                "Operator Permission Required",
-                "The tailscale operator is not set for your user.",
-                "Run: sudo tailscale set --operator=$USER",
+                fl!("health-no-operator-title"),
+                fl!("health-no-operator-body"),
+                fl!("health-no-operator-hint"),
             ),
             AppHealth::Error(msg) => (
-                "Tailscale Error",
-                msg.as_str(),
-                "Check your Tailscale installation.",
+                fl!("health-error-title"),
+                msg.clone(),
+                fl!("health-error-hint"),
             ),
             AppHealth::Healthy => unreachable!(),
         };
@@ -868,83 +869,91 @@ impl Window {
             }
         }
 
-        let conn_label = if st.connected { "Connected" } else { "Disconnected" };
+        let conn_label = if st.connected {
+            fl!("status-connected")
+        } else {
+            fl!("status-disconnected")
+        };
+
+        let copy_tip = fl!("copy-tooltip");
 
         let content = list_column()
             .padding(5)
             .spacing(0)
             .add(settings::item(
-                "Account",
+                fl!("status-account"),
                 row![
                     dropdown(&self.acct_names, sel_acct_idx, Message::SwitchAccount),
-                    button::standard("New Login")
+                    button::standard(fl!("status-new-login"))
                         .on_press(Message::LoginNewAccount)
                         .width(Length::Shrink),
                 ]
                 .spacing(8),
             ))
             .add(settings::item(
-                "IPv4 Address",
+                fl!("status-ipv4"),
                 row![
                     text(&st.ip_v4),
                     button::icon(icon::from_name("edit-copy-symbolic"))
                         .on_press(Message::CopyToClipboard(st.ip_v4.clone()))
-                        .tooltip("Copy"),
+                        .tooltip(&copy_tip),
                 ]
                 .spacing(8)
                 .align_y(Alignment::Center),
             ))
             .add(settings::item(
-                "IPv6 Address",
+                fl!("status-ipv6"),
                 row![
                     text(&st.ip_v6),
                     button::icon(icon::from_name("edit-copy-symbolic"))
                         .on_press(Message::CopyToClipboard(st.ip_v6.clone()))
-                        .tooltip("Copy"),
+                        .tooltip(&copy_tip),
                 ]
                 .spacing(8)
                 .align_y(Alignment::Center),
             ))
             .add(settings::item(
-                "DNS Suffix",
+                fl!("status-dns-suffix"),
                 row![
                     text(&st.dns_suffix),
                     button::icon(icon::from_name("edit-copy-symbolic"))
                         .on_press(Message::CopyToClipboard(st.dns_suffix.clone()))
-                        .tooltip("Copy"),
+                        .tooltip(&copy_tip),
                 ]
                 .spacing(8)
                 .align_y(Alignment::Center),
             ))
-            .add(settings::item("Status", text(conn_label)))
+            .add(settings::item(fl!("status-connection"), text(conn_label)))
             .add(settings::item(
-                "Enable SSH",
+                fl!("status-enable-ssh"),
                 toggler(st.ssh_enabled).on_toggle(Message::EnableSSH),
             ))
             .add(settings::item(
-                "Accept Routes",
+                fl!("status-accept-routes"),
                 toggler(st.accept_routes).on_toggle(Message::AcceptRoutes),
             ))
             .add(settings::item(
-                "MagicDNS",
+                fl!("status-magic-dns"),
                 toggler(st.magic_dns).on_toggle(Message::ToggleMagicDns),
             ))
             .add(settings::item(
-                "Connected",
+                fl!("status-connect-toggle"),
                 toggler(st.connected).on_toggle(Message::ConnectDisconnect),
             ));
 
         // Subnet routes section
-        let mut subnets_section = column![text("Subnet Routes").size(14)].spacing(4).padding(4);
+        let mut subnets_section =
+            column![text(fl!("subnets-title")).size(14)].spacing(4).padding(4);
 
         if st.advertised_routes.is_empty() {
-            subnets_section = subnets_section.push(text("No advertised subnet routes.").size(12));
+            subnets_section =
+                subnets_section.push(text(fl!("subnets-no-routes")).size(12));
         } else {
             for (idx, route) in st.advertised_routes.iter().enumerate() {
                 subnets_section = subnets_section.push(
                     row![
                         text(route).width(Length::Fill),
-                        button::destructive("Remove")
+                        button::destructive(fl!("subnets-remove"))
                             .on_press(Message::RemoveSubnet(idx))
                             .width(Length::Shrink),
                     ]
@@ -956,10 +965,10 @@ impl Window {
 
         subnets_section = subnets_section.push(
             row![
-                text_input("CIDR (e.g. 192.168.1.0/24)", &self.subnet_input)
+                text_input(&fl!("subnets-cidr-placeholder"), &self.subnet_input)
                     .on_input(Message::SubnetInput)
                     .width(250),
-                button::suggested("Add")
+                button::suggested(fl!("subnets-add"))
                     .on_press(Message::AddSubnet)
                     .width(Length::Shrink),
             ]
@@ -975,7 +984,7 @@ impl Window {
 
     fn view_taildrop_tab(&self) -> Element<'_, Message> {
         let file_list_text = if self.send_files.is_empty() {
-            "No files selected".to_string()
+            fl!("taildrop-no-files")
         } else {
             self.send_files
                 .iter()
@@ -984,43 +993,43 @@ impl Window {
                 .join(", ")
         };
 
+        let send_label = fl!("taildrop-send-files");
         let send_btn: Element<'_, Message> = if !self.send_files.is_empty()
-            && self.selected_device_name != "Select"
+            && self.selected_device_name != fl!("select-default")
         {
             Element::from(
-                button::suggested("Send File(s)")
+                button::suggested(&send_label)
                     .on_press(Message::SendFiles)
                     .width(150),
             )
         } else {
-            Element::from(button::standard("Send File(s)").width(150))
+            Element::from(button::standard(&send_label).width(150))
         };
 
         let status_text = if !self.send_file_status.is_empty() {
             self.send_file_status.clone()
         } else if self.files_sent {
-            "File(s) were sent successfully!".to_string()
-        } else if self.selected_device_name == "Select" && !self.send_files.is_empty() {
-            "Choose a device first.".to_string()
+            fl!("taildrop-files-sent")
+        } else if self.selected_device_name == fl!("select-default")
+            && !self.send_files.is_empty()
+        {
+            fl!("taildrop-choose-device")
         } else {
             String::new()
         };
 
         // Waiting files indicator
         let waiting_text = if self.state.waiting_files.is_empty() {
-            "No files waiting.".to_string()
+            fl!("taildrop-no-waiting")
         } else {
-            format!(
-                "{} file(s) waiting in inbox",
-                self.state.waiting_files.len()
-            )
+            fl!("taildrop-waiting-count", "count" => self.state.waiting_files.len().to_string())
         };
 
         let content = list_column()
             .padding(5)
             .spacing(0)
             .add(settings::item(
-                "Target Device",
+                fl!("taildrop-target-device"),
                 dropdown(
                     &self.state.device_names,
                     self.selected_device_idx,
@@ -1029,12 +1038,12 @@ impl Window {
                 .width(200),
             ))
             .add(settings::item(
-                "Selected Files",
+                fl!("taildrop-selected-files"),
                 text(file_list_text).size(12),
             ))
             .add(Element::from(
                 row![
-                    button::standard("Select File(s)")
+                    button::standard(fl!("taildrop-select-files"))
                         .on_press(Message::ChooseFiles)
                         .width(150),
                     horizontal_space().width(Length::Fill),
@@ -1043,21 +1052,24 @@ impl Window {
                 .spacing(8)
                 .padding(8),
             ))
-            .add(settings::item("Inbox", text(waiting_text).size(12)))
+            .add(settings::item(
+                fl!("taildrop-inbox"),
+                text(waiting_text).size(12),
+            ))
             .add(Element::from(
                 row![
-                    button::standard("Receive File(s)")
+                    button::standard(fl!("taildrop-receive-files"))
                         .on_press(Message::ReceiveFiles)
                         .width(150),
                 ]
                 .padding(8),
             ))
             .add(settings::item(
-                "Transfer Status",
+                fl!("taildrop-transfer-status"),
                 column![text(status_text), text(self.receive_file_status.clone())].spacing(2),
             ))
             .add(settings::item(
-                "Download Directory",
+                fl!("taildrop-download-directory"),
                 text(
                     self.preferences
                         .download_dir
@@ -1073,35 +1085,40 @@ impl Window {
         let can_toggle_host = self.sel_exit_node_idx == Some(0)
             || self.sel_exit_node_idx.is_none();
 
+        let host_label = if self.state.is_exit_node {
+            fl!("exit-node-disable-host")
+        } else {
+            fl!("exit-node-enable-host")
+        };
+
         let host_exit_toggler: Element<'_, Message> = if can_toggle_host {
             Element::from(
                 toggler(self.state.is_exit_node)
-                    .label(if self.state.is_exit_node {
-                        "Disable Host Exit Node"
-                    } else {
-                        "Enable Host Exit Node"
-                    })
+                    .label(host_label)
                     .on_toggle(Message::UpdateIsExitNode),
             )
         } else {
-            Element::from(toggler(self.state.is_exit_node).label("Enable Host Exit Node"))
+            Element::from(
+                toggler(self.state.is_exit_node).label(fl!("exit-node-enable-host")),
+            )
         };
 
+        let lan_label = fl!("exit-node-allow-lan");
         let lan_toggler: Element<'_, Message> = if self.state.is_exit_node {
             Element::from(
                 toggler(self.state.exit_node_allow_lan)
-                    .label("Allow LAN Access")
+                    .label(&lan_label)
                     .on_toggle(Message::AllowExitNodeLanAccess),
             )
         } else {
-            Element::from(toggler(self.state.exit_node_allow_lan).label("Allow LAN Access"))
+            Element::from(toggler(self.state.exit_node_allow_lan).label(&lan_label))
         };
 
         let content = list_column()
             .padding(5)
             .spacing(0)
             .add(settings::item(
-                "Selected Node",
+                fl!("exit-node-selected"),
                 dropdown(
                     &self.exit_node_names,
                     self.sel_exit_node_idx,
@@ -1123,7 +1140,11 @@ impl Window {
 
         for (idx, dev) in self.state.devices.iter().enumerate() {
             let dot = if dev.online { "●" } else { "○" };
-            let self_label = if dev.is_self { " (this device)" } else { "" };
+            let self_label = if dev.is_self {
+                format!(" {}", fl!("devices-this-device"))
+            } else {
+                String::new()
+            };
             let ip = dev.tailscale_ips.first().map(|s| s.as_str()).unwrap_or("");
 
             let label = format!("{dot} {}{self_label} — {} — {ip}", dev.name, dev.os);
@@ -1135,11 +1156,13 @@ impl Window {
             ));
         }
 
+        let copy_tip = fl!("copy-tooltip");
+
         let detail: Element<'_, Message> =
             if let Some(idx) = self.selected_device_detail_idx {
                 if let Some(dev) = self.state.devices.get(idx) {
                     let tags_str = if dev.tags.is_empty() {
-                        "None".to_string()
+                        fl!("devices-tags-none")
                     } else {
                         dev.tags.join(", ")
                     };
@@ -1151,7 +1174,7 @@ impl Window {
                         .unwrap_or_else(|| "N/A".to_string());
 
                     let ping_section: Element<'_, Message> = if self.ping_in_progress {
-                        Element::from(text("Pinging..."))
+                        Element::from(text(fl!("devices-pinging")))
                     } else if let Some(ref pr) = self.ping_result {
                         let via = if pr.is_direct { "direct" } else { "relay" };
                         Element::from(text(format!(
@@ -1163,46 +1186,66 @@ impl Window {
                         Element::from(text(""))
                     };
 
+                    let last_seen_text = if dev.last_seen.is_empty() {
+                        fl!("devices-last-seen-now")
+                    } else {
+                        dev.last_seen.clone()
+                    };
+
                     Element::from(
                         list_column()
                             .padding(5)
                             .spacing(0)
-                            .add(settings::item("Name", text(&dev.name)))
                             .add(settings::item(
-                                "DNS Name",
+                                fl!("devices-name"),
+                                text(&dev.name),
+                            ))
+                            .add(settings::item(
+                                fl!("devices-dns-name"),
                                 row![
                                     text(&dev.dns_name),
                                     button::icon(icon::from_name("edit-copy-symbolic"))
                                         .on_press(Message::CopyToClipboard(dev.dns_name.clone()))
-                                        .tooltip("Copy"),
+                                        .tooltip(&copy_tip),
                                 ]
                                 .spacing(8)
                                 .align_y(Alignment::Center),
                             ))
                             .add(settings::item(
-                                "IP Address",
+                                fl!("devices-ip-address"),
                                 row![
                                     text(&ip),
                                     button::icon(icon::from_name("edit-copy-symbolic"))
                                         .on_press(Message::CopyToClipboard(ip.clone()))
-                                        .tooltip("Copy"),
+                                        .tooltip(&copy_tip),
                                 ]
                                 .spacing(8)
                                 .align_y(Alignment::Center),
                             ))
-                            .add(settings::item("OS", text(&dev.os)))
+                            .add(settings::item(fl!("devices-os"), text(&dev.os)))
                             .add(settings::item(
-                                "Online",
-                                text(if dev.online { "Yes" } else { "No" }),
+                                fl!("devices-online"),
+                                text(if dev.online {
+                                    fl!("devices-yes")
+                                } else {
+                                    fl!("devices-no")
+                                }),
                             ))
                             .add(settings::item(
-                                "Exit Node",
-                                text(if dev.is_exit_node { "Yes" } else { "No" }),
+                                fl!("devices-exit-node"),
+                                text(if dev.is_exit_node {
+                                    fl!("devices-yes")
+                                } else {
+                                    fl!("devices-no")
+                                }),
                             ))
-                            .add(settings::item("Tags", text(tags_str)))
-                            .add(settings::item("Relay", text(&dev.relay)))
+                            .add(settings::item(fl!("devices-tags"), text(tags_str)))
                             .add(settings::item(
-                                "Traffic",
+                                fl!("devices-relay"),
+                                text(&dev.relay),
+                            ))
+                            .add(settings::item(
+                                fl!("devices-traffic"),
                                 text(format!(
                                     "↓ {} / ↑ {}",
                                     format_bytes(dev.rx_bytes),
@@ -1210,18 +1253,13 @@ impl Window {
                                 )),
                             ))
                             .add(settings::item(
-                                "Last Seen",
-                                text(if dev.last_seen.is_empty() {
-                                    "Now"
-                                } else {
-                                    &dev.last_seen
-                                }),
+                                fl!("devices-last-seen"),
+                                text(last_seen_text),
                             ))
                             .add(Element::from(
                                 row![
-                                    button::standard("Ping")
-                                        .on_press(Message::PingDevice(ip.clone()))
-                                        .tooltip("Ping this device"),
+                                    button::standard(fl!("devices-ping"))
+                                        .on_press(Message::PingDevice(ip.clone())),
                                     ping_section,
                                 ]
                                 .spacing(8)
@@ -1230,15 +1268,15 @@ impl Window {
                             )),
                     )
                 } else {
-                    Element::from(text("Device not found"))
+                    Element::from(text(fl!("devices-not-found")))
                 }
             } else {
-                Element::from(text("Select a device above to see details."))
+                Element::from(text(fl!("devices-select-prompt")))
             };
 
         Element::from(
             column![
-                text("Devices on Tailnet").size(16),
+                text(fl!("devices-title")).size(16),
                 Element::from(device_list),
                 detail,
             ]
@@ -1250,26 +1288,26 @@ impl Window {
         let download_dir_display = self
             .preferences
             .download_dir
-            .as_deref()
-            .unwrap_or("~/Downloads (default)");
+            .clone()
+            .unwrap_or_else(|| fl!("settings-download-dir-default"));
 
         let content = list_column()
             .padding(5)
             .spacing(0)
             .add(settings::item(
-                "Auto-connect on startup",
+                fl!("settings-auto-connect"),
                 toggler(self.preferences.auto_connect).on_toggle(Message::SetAutoConnect),
             ))
             .add(settings::item(
-                "Dynamic panel icon",
+                fl!("settings-dynamic-icon"),
                 toggler(self.preferences.icon_style == "dynamic")
                     .on_toggle(Message::SetIconStyle),
             ))
             .add(settings::item(
-                "Download Directory",
+                fl!("settings-download-dir"),
                 row![
                     text(download_dir_display),
-                    button::standard("Change")
+                    button::standard(fl!("settings-download-dir-change"))
                         .on_press(Message::ChooseDownloadDir)
                         .width(Length::Shrink),
                 ]
@@ -1277,31 +1315,31 @@ impl Window {
                 .align_y(Alignment::Center),
             ))
             .add(settings::item(
-                "Poll Interval (seconds)",
+                fl!("settings-poll-interval"),
                 text_input("10", &self.preferences.poll_interval_secs.to_string())
                     .on_input(Message::SetPollInterval)
                     .width(80),
             ))
             .add(Element::from(
-                column![text("Notifications").size(14)].padding(8),
+                column![text(fl!("settings-notifications-title")).size(14)].padding(8),
             ))
             .add(settings::item(
-                "Enable Notifications",
+                fl!("settings-notifications-enabled"),
                 toggler(self.preferences.notifications_enabled)
                     .on_toggle(Message::SetNotificationsEnabled),
             ))
             .add(settings::item(
-                "Connection Changes",
+                fl!("settings-notify-connection"),
                 toggler(self.preferences.notify_on_connection_change)
                     .on_toggle(Message::SetNotifyConnection),
             ))
             .add(settings::item(
-                "Incoming Files",
+                fl!("settings-notify-files"),
                 toggler(self.preferences.notify_on_incoming_files)
                     .on_toggle(Message::SetNotifyFiles),
             ))
             .add(settings::item(
-                "New Devices",
+                fl!("settings-notify-devices"),
                 toggler(self.preferences.notify_on_new_device)
                     .on_toggle(Message::SetNotifyDevice),
             ));
