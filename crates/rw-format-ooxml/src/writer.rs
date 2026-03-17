@@ -10,7 +10,7 @@ use rw_document::{
     inline::BreakType,
     properties::{Alignment, UnderlineStyle},
 };
-use std::io::{Cursor, Write, Seek};
+use std::io::{Write, Seek};
 use zip::{ZipWriter, write::SimpleFileOptions};
 
 /// Write a document to a .docx ZIP archive using the provided writer.
@@ -48,7 +48,7 @@ pub fn write_docx_to_writer<W: Write + Seek>(
     zip.write_all(core_xml.as_bytes())?;
 
     // Write embedded images
-    for (data_id, resource) in &doc.resources.resources {
+    for (_data_id, resource) in &doc.resources.resources {
         let filename = resource
             .filename
             .as_deref()

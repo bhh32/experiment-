@@ -9,7 +9,7 @@ use rw_document::{
     Block, Document, Inline, Paragraph, Section, TextRun,
     block::{TableBlock, TableCell, TableCellProperties, TableProperties},
     inline::BreakType,
-    properties::{Alignment, CharacterProperties, ParagraphProperties, UnderlineStyle},
+    properties::{Alignment, CharacterProperties, UnderlineStyle},
     ElementId,
 };
 use std::path::Path;
@@ -46,7 +46,7 @@ pub fn parse_html(html: &str) -> Result<Document, HtmlError> {
 enum Token {
     OpenTag { name: String, attrs: Vec<(String, String)> },
     CloseTag { name: String },
-    SelfClose { name: String, attrs: Vec<(String, String)> },
+    SelfClose { name: String, #[allow(dead_code)] attrs: Vec<(String, String)> },
     Text(String),
 }
 
@@ -368,7 +368,7 @@ impl HtmlParser {
     }
 
     fn collect_inline_runs(&mut self, inlines: &mut Vec<Inline>, end_tag: &str) {
-        let mut char_props = CharacterProperties::default();
+        let char_props = CharacterProperties::default();
 
         loop {
             match self.peek() {

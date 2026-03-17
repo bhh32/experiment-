@@ -1,6 +1,6 @@
 //! Table autoformat — predefined table styles.
 
-use rw_document::block::{TableBlock, TableBorders, TableCellProperties};
+use rw_document::block::{TableBlock, TableBorders};
 use rw_document::properties::{BorderLine, BorderStyle};
 use rw_document::{Color, Twips};
 

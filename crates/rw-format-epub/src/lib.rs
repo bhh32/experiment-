@@ -57,7 +57,7 @@ pub enum EpubVersion {
 /// Read (import) an EPUB file and extract its text content into a Document.
 pub fn read_epub(path: &std::path::Path) -> Result<Document, EpubError> {
     use rw_format_html::parse_html;
-    use rw_document::section::Section;
+
     use std::io::Read;
     use zip::ZipArchive;
 

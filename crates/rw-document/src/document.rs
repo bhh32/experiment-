@@ -218,7 +218,6 @@ mod base64_serde {
     use serde::de::Error;
 
     pub fn serialize<S: Serializer>(data: &[u8], serializer: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::Error;
         let encoded = data.iter().fold(String::new(), |mut acc, byte| {
             use std::fmt::Write;
             write!(acc, "{:02x}", byte).unwrap();

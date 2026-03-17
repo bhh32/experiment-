@@ -71,7 +71,7 @@ pub fn evaluate_field(field: &FieldType, doc: &Document) -> String {
             .clone()
             .unwrap_or_default(),
         FieldType::Custom { name: _, value } => value.clone(),
-        FieldType::CrossReference { bookmark_name, ref_type } => {
+        FieldType::CrossReference { bookmark_name, ref_type: _ } => {
             // Without layout we can only return the bookmark name as a hint
             format!("[{}]", bookmark_name)
         }

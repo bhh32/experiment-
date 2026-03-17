@@ -7,7 +7,6 @@ use rw_document::{
     Block, Document, Inline,
     block::TableBlock,
     inline::BreakType,
-    properties::{Alignment, UnderlineStyle},
 };
 use std::io::{Write, Seek};
 use zip::{ZipWriter, write::SimpleFileOptions};
@@ -125,7 +124,7 @@ fn generate_content_xml(doc: &Document) -> String {
     xml
 }
 
-fn collect_automatic_styles(doc: &Document, xml: &mut String) {
+fn collect_automatic_styles(_doc: &Document, xml: &mut String) {
     // We generate inline styles for bold/italic/etc.
     // For simplicity, generate named styles for each combination encountered.
     // In a real implementation this would deduplicate styles.
@@ -143,7 +142,7 @@ fn collect_automatic_styles(doc: &Document, xml: &mut String) {
 fn write_block_odf(block: &Block, xml: &mut String) {
     match block {
         Block::Paragraph(para) => {
-            let style = para.properties.paragraph_style.as_deref().unwrap_or("Text_20_Body");
+            let _style = para.properties.paragraph_style.as_deref().unwrap_or("Text_20_Body");
             let outline_level = para.properties.outline_level;
 
             if let Some(level) = outline_level {

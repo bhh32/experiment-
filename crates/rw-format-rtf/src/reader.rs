@@ -5,7 +5,7 @@
 
 use crate::RtfError;
 use rw_document::{
-    Block, Color, Document, Inline, Paragraph, Section, TextRun,
+    Block, Color, Document, Inline, Paragraph, TextRun,
     properties::{Alignment, CharacterProperties, ParagraphProperties, UnderlineStyle},
 };
 
@@ -44,6 +44,7 @@ enum RtfToken {
     Text(String),
 }
 
+#[allow(dead_code)]
 struct RtfParser<'a> {
     data: &'a [u8],
     pos: usize,
@@ -55,6 +56,7 @@ struct RtfParser<'a> {
     color_table: Vec<Color>,
 }
 
+#[allow(dead_code)]
 #[derive(Clone, Default)]
 struct ParserState {
     char_props: CharacterProperties,
@@ -81,10 +83,12 @@ impl<'a> RtfParser<'a> {
         }
     }
 
+    #[allow(dead_code)]
     fn state(&self) -> &ParserState {
         self.state_stack.last().unwrap()
     }
 
+    #[allow(dead_code)]
     fn state_mut(&mut self) -> &mut ParserState {
         self.state_stack.last_mut().unwrap()
     }

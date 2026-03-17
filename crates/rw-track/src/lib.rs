@@ -85,6 +85,7 @@ impl Default for TrackingConfig {
 
 /// The main change tracker struct.
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct ChangeTracker {
     config: TrackingConfig,
     changes: Vec<TrackedChange>,

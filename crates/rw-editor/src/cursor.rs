@@ -154,13 +154,11 @@ impl Cursor {
                     let mut graphemes = plain.grapheme_indices(true);
                     // Advance to (or past) the current offset
                     let mut next_offset: Option<usize> = None;
-                    let mut found_current = false;
                     for (byte_pos, g) in graphemes.by_ref() {
-                        if byte_pos == offset && !found_current {
-                            found_current = true;
+                        if byte_pos == offset {
                             next_offset = Some(byte_pos + g.len());
                             break;
-                        } else if byte_pos > offset && !found_current {
+                        } else if byte_pos > offset {
                             // offset is inside a multi-byte grapheme — advance to end of it
                             next_offset = Some(byte_pos);
                             break;

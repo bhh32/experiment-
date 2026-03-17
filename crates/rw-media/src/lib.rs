@@ -15,7 +15,7 @@ pub mod shapes;
 pub mod wrapping;
 
 use std::collections::HashMap;
-use rw_document::inline::{InlineImage, ImageSource};
+use rw_document::inline::ImageSource;
 use rw_document::Twips;
 
 /// Supported image formats.

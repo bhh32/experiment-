@@ -1,6 +1,7 @@
 use crate::line::{GlyphRun, LayoutLine, PositionedGlyph};
 use crate::page::LayoutPage;
 use crate::result::LayoutResult;
+use crate::text_shaping::{TextShaper, ShapedGlyph};
 use crate::LayoutRect;
 use rw_document::document::DocumentDefaults;
 use rw_document::inline::Inline;
@@ -11,13 +12,15 @@ use rw_styles::catalog::StyleCatalog;
 /// The main layout engine.
 ///
 /// Takes a document and computes the complete page layout.
-/// The layout engine is designed to be incremental — when the
-/// document changes, only affected pages are re-laid-out.
+/// Uses `cosmic_text` via `TextShaper` for accurate, HarfBuzz-backed
+/// text measurement and glyph positioning.
 pub struct LayoutEngine {
     /// DPI for pixel conversion
     pub dpi: f64,
     /// Whether to enable hyphenation
     pub hyphenation: bool,
+    /// Text shaper backed by cosmic_text
+    shaper: TextShaper,
 }
 
 // ---------------------------------------------------------------------------
@@ -26,6 +29,7 @@ pub struct LayoutEngine {
 struct WordChunk {
     text: String,
     run_id: ElementId,
+    font_family: String,
     font_size: f64,
     bold: bool,
     italic: bool,
@@ -37,17 +41,18 @@ impl LayoutEngine {
         Self {
             dpi: 96.0,
             hyphenation: true,
+            shaper: TextShaper::new(),
         }
     }
 
     /// Perform a full layout of the document.
-    pub fn layout(&self, document: &Document) -> LayoutResult {
+    pub fn layout(&mut self, document: &Document) -> LayoutResult {
         self.layout_with_styles(document, &StyleCatalog::with_defaults())
     }
 
     /// Perform a full layout of the document with a given style catalog.
     pub fn layout_with_styles(
-        &self,
+        &mut self,
         document: &Document,
         _catalog: &StyleCatalog,
     ) -> LayoutResult {
@@ -174,11 +179,11 @@ impl LayoutEngine {
 
     /// Lay out a single paragraph into a sequence of `LayoutLine`s.
     ///
-    /// Measures each text run, breaks at word boundaries that exceed
-    /// `available_width`, and produces positioned lines (y=0 relative;
-    /// the caller repositions them).
+    /// Uses cosmic_text for accurate text measurement and glyph shaping.
+    /// Breaks at word boundaries that exceed `available_width`, and
+    /// produces positioned lines (y=0 relative; the caller repositions them).
     pub fn layout_paragraph(
-        &self,
+        &mut self,
         para: &Paragraph,
         available_width: f64,
         defaults: &DocumentDefaults,
@@ -189,6 +194,8 @@ impl LayoutEngine {
             .font_size
             .map(|hp| hp as f64 / 2.0)
             .unwrap_or(12.0);
+
+        let default_font_family = "Liberation Serif";
 
         let first_line_extra = para
             .properties
@@ -208,6 +215,12 @@ impl LayoutEngine {
                         .unwrap_or(default_font_size);
                     let bold = run.properties.bold.unwrap_or(false);
                     let italic = run.properties.italic.unwrap_or(false);
+                    let font_family = run
+                        .properties
+                        .font_family
+                        .as_deref()
+                        .unwrap_or(default_font_family)
+                        .to_string();
                     let color = run
                         .properties
                         .color
@@ -218,6 +231,7 @@ impl LayoutEngine {
                             chunks.push(WordChunk {
                                 text: word,
                                 run_id: run.id,
+                                font_family: font_family.clone(),
                                 font_size: size,
                                 bold,
                                 italic,
@@ -230,6 +244,7 @@ impl LayoutEngine {
                     chunks.push(WordChunk {
                         text: "\t".to_string(),
                         run_id: ElementId::new(),
+                        font_family: default_font_family.to_string(),
                         font_size: default_font_size,
                         bold: false,
                         italic: false,
@@ -252,30 +267,39 @@ impl LayoutEngine {
             }];
         }
 
+        // Measure each chunk using cosmic_text
+        let chunk_widths: Vec<f64> = chunks
+            .iter()
+            .map(|chunk| {
+                self.shaper.measure_width(
+                    &chunk.text,
+                    &chunk.font_family,
+                    chunk.font_size,
+                    chunk.bold,
+                    chunk.italic,
+                )
+            })
+            .collect();
+
         // Greedy line-breaking
         let mut lines: Vec<LayoutLine> = Vec::new();
         let mut line_start: usize = 0;
         let mut line_width = 0.0f64;
         let mut line_index: usize = 0;
 
-        for (i, chunk) in chunks.iter().enumerate() {
-            let word_width = Self::estimate_text_width(&chunk.text, chunk.font_size);
-            let indent = if i == 0 { first_line_extra } else { 0.0 };
+        for (i, chunk_width) in chunk_widths.iter().enumerate() {
+            let indent = if line_index == 0 { first_line_extra } else { 0.0 };
             let effective_width = available_width - indent;
 
-            if line_width + word_width > effective_width && i > line_start {
+            if line_width + chunk_width > effective_width && i > line_start {
                 // Flush current line
-                let line = build_line(
+                let line = self.build_line(
                     line_index,
                     para.id,
                     &chunks[line_start..i],
                     available_width,
-                    para.properties
-                        .default_char_props
-                        .as_ref()
-                        .and_then(|cp| cp.font_size)
-                        .map(|hp| hp as f64 / 2.0)
-                        .unwrap_or(default_font_size),
+                    default_font_size,
+                    default_font_family,
                 );
                 lines.push(line);
                 line_start = i;
@@ -283,17 +307,18 @@ impl LayoutEngine {
                 line_index += 1;
             }
 
-            line_width += word_width;
+            line_width += chunk_width;
         }
 
         // Flush trailing chunks
         if line_start < chunks.len() {
-            let line = build_line(
+            let line = self.build_line(
                 line_index,
                 para.id,
                 &chunks[line_start..],
                 available_width,
                 default_font_size,
+                default_font_family,
             );
             lines.push(line);
         }
@@ -301,24 +326,101 @@ impl LayoutEngine {
         lines
     }
 
-    /// Estimate the point width of a text string.
+    /// Build a `LayoutLine` from a slice of word chunks using cosmic_text shaping.
     ///
-    /// Simple approximation: `0.6 × font_size` per character.
-    pub fn estimate_text_width(text: &str, font_size: f64) -> f64 {
-        text.chars().count() as f64 * font_size * 0.6
+    /// Line is positioned at (0, 0); the caller moves it to the correct page
+    /// position later.
+    fn build_line(
+        &mut self,
+        line_index: usize,
+        para_id: ElementId,
+        chunks: &[WordChunk],
+        available_width: f64,
+        default_font_size: f64,
+        _default_font_family: &str,
+    ) -> LayoutLine {
+        // Derive line metrics from the largest font in the line
+        let max_font = chunks
+            .iter()
+            .map(|c| c.font_size)
+            .fold(default_font_size, f64::max);
+        let line_height = max_font * 1.2;
+        let baseline = max_font * 0.8;
+
+        let mut runs: Vec<GlyphRun> = Vec::new();
+        let mut x_offset = 0.0f64;
+
+        for chunk in chunks {
+            let (shaped_glyphs, metrics) = self.shaper.shape_text(
+                &chunk.text,
+                &chunk.font_family,
+                chunk.font_size,
+                chunk.bold,
+                chunk.italic,
+            );
+
+            let width = metrics.width;
+
+            let glyphs: Vec<PositionedGlyph> = shaped_glyphs
+                .iter()
+                .map(|sg: &ShapedGlyph| PositionedGlyph {
+                    glyph_id: sg.glyph_id,
+                    x: sg.x,
+                    y: 0.0,
+                    advance: sg.advance,
+                    byte_offset: sg.byte_start,
+                })
+                .collect();
+
+            runs.push(GlyphRun {
+                bounds: LayoutRect::new(x_offset, 0.0, width, line_height),
+                glyphs,
+                font_family: chunk.font_family.clone(),
+                font_size: chunk.font_size,
+                bold: chunk.bold,
+                italic: chunk.italic,
+                color: chunk.color.clone(),
+                text_run_id: chunk.run_id,
+                text: chunk.text.clone(),
+            });
+
+            x_offset += width;
+        }
+
+        let total_width = x_offset.min(available_width);
+
+        LayoutLine {
+            bounds: LayoutRect::new(0.0, 0.0, total_width, line_height),
+            runs,
+            baseline,
+            paragraph_id: para_id,
+            line_in_paragraph: line_index,
+        }
+    }
+
+    /// Measure the point width of a text string using cosmic_text.
+    pub fn measure_text_width(&mut self, text: &str, font_size: f64) -> f64 {
+        self.shaper
+            .measure_width(text, "Liberation Serif", font_size, false, false)
     }
 
     /// Break a text string into lines that fit within `max_width`.
     ///
-    /// Uses greedy word-boundary breaking.
-    pub fn break_text_into_lines(text: &str, max_width: f64, font_size: f64) -> Vec<String> {
+    /// Uses greedy word-boundary breaking with cosmic_text measurement.
+    pub fn break_text_into_lines(&mut self, text: &str, max_width: f64, font_size: f64) -> Vec<String> {
         let words = split_words(text);
         let mut lines: Vec<String> = Vec::new();
         let mut current = String::new();
         let mut current_width = 0.0f64;
 
         for word in words {
-            let w = Self::estimate_text_width(&word, font_size);
+            let w = self.shaper.measure_width(
+                &word,
+                "Liberation Serif",
+                font_size,
+                false,
+                false,
+            );
             if current_width + w > max_width && !current.is_empty() {
                 lines.push(current.trim_end().to_string());
                 current = word;
@@ -378,74 +480,4 @@ fn split_words(text: &str) -> Vec<String> {
     }
 
     result
-}
-
-/// Build a `LayoutLine` from a slice of word chunks.
-///
-/// Line is positioned at (0, 0); the caller moves it to the correct page
-/// position later.
-fn build_line(
-    line_index: usize,
-    para_id: ElementId,
-    chunks: &[WordChunk],
-    available_width: f64,
-    default_font_size: f64,
-) -> LayoutLine {
-    // Derive line metrics from the largest font in the line
-    let max_font = chunks
-        .iter()
-        .map(|c| c.font_size)
-        .fold(default_font_size, f64::max);
-    let line_height = max_font * 1.2;
-    let baseline = max_font * 0.8;
-
-    let mut runs: Vec<GlyphRun> = Vec::new();
-    let mut x_offset = 0.0f64;
-
-    for chunk in chunks {
-        let width = LayoutEngine::estimate_text_width(&chunk.text, chunk.font_size);
-        let char_count = chunk.text.chars().count();
-        let char_advance = if char_count > 0 {
-            width / char_count as f64
-        } else {
-            0.0
-        };
-
-        let glyphs: Vec<PositionedGlyph> = chunk
-            .text
-            .char_indices()
-            .enumerate()
-            .map(|(i, (byte_off, _))| PositionedGlyph {
-                glyph_id: 0,
-                x: i as f64 * char_advance,
-                y: 0.0,
-                advance: char_advance,
-                byte_offset: byte_off,
-            })
-            .collect();
-
-        runs.push(GlyphRun {
-            bounds: LayoutRect::new(x_offset, 0.0, width, line_height),
-            glyphs,
-            font_family: "Liberation Serif".to_string(),
-            font_size: chunk.font_size,
-            bold: chunk.bold,
-            italic: chunk.italic,
-            color: chunk.color.clone(),
-            text_run_id: chunk.run_id,
-            text: chunk.text.clone(),
-        });
-
-        x_offset += width;
-    }
-
-    let total_width = x_offset.min(available_width);
-
-    LayoutLine {
-        bounds: LayoutRect::new(0.0, 0.0, total_width, line_height),
-        runs,
-        baseline,
-        paragraph_id: para_id,
-        line_in_paragraph: line_index,
-    }
 }

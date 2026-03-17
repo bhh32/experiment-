@@ -7,7 +7,7 @@ use rw_document::{
     Block, Document, Inline,
     block::TableBlock,
     inline::BreakType,
-    properties::{Alignment, UnderlineStyle},
+    properties::Alignment,
 };
 use std::path::Path;
 

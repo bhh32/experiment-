@@ -1,4 +1,4 @@
-use crate::{StyleBase, StyleCategory, StyleName};
+use crate::{StyleBase, StyleCategory};
 use serde::{Deserialize, Serialize};
 
 /// A paragraph style definition.

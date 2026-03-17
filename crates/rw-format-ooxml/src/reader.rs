@@ -111,7 +111,7 @@ fn parse_document_body(
     let mut in_rpr = false;
     let mut in_ppr = false;
     let mut in_text = false;
-    let mut preserve_space = false;
+    let mut _preserve_space = false;
 
     // Table state
     let mut table_stack: Vec<TableBlock> = Vec::new();
@@ -152,12 +152,12 @@ fn parse_document_body(
                     "t" => {
                         if in_run {
                             in_text = true;
-                            preserve_space = false;
+                            _preserve_space = false;
                             for attr in e.attributes().flatten() {
                                 let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
                                 if key.ends_with("space") || key == "xml:space" {
                                     let val = String::from_utf8_lossy(&attr.value).to_string();
-                                    preserve_space = val == "preserve";
+                                    _preserve_space = val == "preserve";
                                 }
                             }
                         }
@@ -169,7 +169,7 @@ fn parse_document_body(
                         current_run_props.italic = Some(true);
                     }
                     "u" if in_rpr => {
-                        let mut underline = UnderlineStyle::Single;
+                        let underline = UnderlineStyle::Single;
                         let mut has_none = false;
                         for attr in e.attributes().flatten() {
                             let key = String::from_utf8_lossy(attr.key.as_ref()).to_string();
@@ -301,7 +301,7 @@ fn parse_document_body(
                 match name.as_str() {
                     "t" => {
                         in_text = false;
-                        preserve_space = false;
+                        _preserve_space = false;
                     }
                     "rPr" => {
                         in_rpr = false;

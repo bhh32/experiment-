@@ -4,7 +4,9 @@
 
 mod app;
 mod config;
+mod keyboard;
 mod messages;
+mod toolbar;
 
 fn main() -> cosmic::iced::Result {
     env_logger::init();

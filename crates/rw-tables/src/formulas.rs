@@ -4,7 +4,7 @@
 //! Uses Word-compatible cell references (A1 notation where columns
 //! are letters and rows are numbers).
 
-use rw_document::block::{TableBlock, Block};
+use rw_document::block::TableBlock;
 use thiserror::Error;
 
 /// A table cell formula.

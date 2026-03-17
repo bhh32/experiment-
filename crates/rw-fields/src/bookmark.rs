@@ -65,8 +65,6 @@ impl BookmarkManager {
 
     /// Scan the document for bookmark markers and populate the manager.
     pub fn scan_document(&mut self, doc: &Document) {
-        use rw_document::{Block, Inline};
-
         for section in &doc.sections {
             for block in &section.content {
                 self.scan_block(block);

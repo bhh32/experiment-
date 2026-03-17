@@ -100,7 +100,7 @@ fn merge_block(block: &mut Block, record: &HashMap<String, String>) {
             let mut new_content = Vec::with_capacity(para.content.len());
             for inline in para.content.drain(..) {
                 match inline {
-                    Inline::Field(mut field_ref) => {
+                    Inline::Field(field_ref) => {
                         if let FieldType::MergeField { ref field_name } = field_ref.field_type {
                             let value = record
                                 .get(field_name)

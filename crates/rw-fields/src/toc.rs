@@ -115,7 +115,7 @@ impl TocGenerator {
 /// Parse heading level from style name ("Heading 1" -> 1, "heading2" -> 2, etc.)
 fn heading_level(style: &str) -> Option<u8> {
     let lower = style.to_lowercase();
-    let trimmed = lower.trim_start_matches("heading").trim_start_matches(' ').trim();
+    let _trimmed = lower.trim_start_matches("heading").trim_start_matches(' ').trim();
     // "Heading 1", "Heading1", "h1"
     if lower.starts_with("heading") {
         let num_part = lower

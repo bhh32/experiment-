@@ -9,6 +9,7 @@ use rw_widgets::status_bar::ViewMode;
 
 /// Top-level application messages.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum Message {
     /// No-op message
     None,
@@ -16,10 +17,14 @@ pub enum Message {
     // --- File operations ---
     /// Create a new empty document
     NewDocument,
+    /// Open file dialog requested
+    RequestOpenFile,
     /// Open a file (path provided by file dialog)
     OpenFile(String),
     /// Save the current document
     Save,
+    /// Request a save-as dialog
+    RequestSaveAs,
     /// Save with a new path
     SaveAs(String),
     /// Export to a specific format
@@ -86,6 +91,8 @@ pub enum Message {
     ReplaceNext(String, String),
     /// Replace all matches
     ReplaceAll(String, String),
+    /// Close find/replace bar
+    CloseFindReplace,
 
     // --- Ribbon ---
     /// Switch the active ribbon tab
@@ -96,6 +103,10 @@ pub enum Message {
     // --- View ---
     /// Change zoom level
     ZoomChanged(u32),
+    /// Zoom in
+    ZoomIn,
+    /// Zoom out
+    ZoomOut,
     /// Toggle focus/zen mode
     ToggleFocusMode,
     /// Toggle command palette
@@ -134,6 +145,10 @@ pub enum Message {
     InsertPageNumber,
     /// Insert date field
     InsertDate,
+    /// Insert horizontal rule
+    InsertHorizontalRule,
+    /// Insert symbol/special character
+    InsertSymbol(char),
 
     // --- Print ---
     /// Print the document
@@ -154,6 +169,18 @@ pub enum Message {
     PaletteQueryChanged(String),
     /// Command palette item selected
     PaletteItemSelected(String),
+
+    // --- Backstage ---
+    /// Open the backstage/File view
+    OpenBackstage,
+    /// Close the backstage/File view
+    CloseBackstage,
+    /// Navigate to a backstage page
+    BackstageNavigate(BackstagePage),
+
+    // --- Keyboard event ---
+    /// Raw key press event from subscription
+    KeyPressed(KeyCode, KeyModifiers),
 }
 
 /// Cursor movement message.
@@ -175,6 +202,7 @@ pub enum CursorDirection {
 
 /// Cursor movement unit.
 #[derive(Debug, Clone, Copy)]
+#[allow(dead_code)]
 pub enum CursorUnit {
     Character,
     Word,
@@ -186,6 +214,7 @@ pub enum CursorUnit {
 
 /// Export format.
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub enum ExportFormat {
     Pdf,
     Html,
@@ -194,4 +223,59 @@ pub enum ExportFormat {
     Docx,
     Odt,
     Epub,
+}
+
+/// Backstage page identifiers.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BackstagePage {
+    Info,
+    New,
+    Open,
+    Recent,
+    Save,
+    SaveAs,
+    Print,
+    Export,
+    Options,
+}
+
+/// Keyboard key codes (simplified from iced).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum KeyCode {
+    Character(char),
+    Enter,
+    Tab,
+    Backspace,
+    Delete,
+    Escape,
+    Left,
+    Right,
+    Up,
+    Down,
+    Home,
+    End,
+    PageUp,
+    PageDown,
+    Insert,
+    F1,
+    F2,
+    F3,
+    F4,
+    F5,
+    F6,
+    F7,
+    F8,
+    F9,
+    F10,
+    F11,
+    F12,
+}
+
+/// Keyboard modifiers.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct KeyModifiers {
+    pub shift: bool,
+    pub ctrl: bool,
+    pub alt: bool,
+    pub logo: bool,
 }
