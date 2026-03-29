@@ -2,7 +2,7 @@
 
 ## Overview
 
-A native Android app for Codeberg (and other Forgejo/Gitea instances) that provides a mobile experience comparable to the GitHub Android app. Built in Rust using Tauri Mobile for the application shell and a web-based UI rendered natively on Android.
+A native Android app for Codeberg (and other Forgejo/Gitea instances) that provides a mobile experience comparable to the GitHub Android app. Built entirely in Rust using Tauri Mobile for the Android shell and Leptos (compiled to WASM) for the reactive UI.
 
 ## Tech Stack
 
@@ -10,7 +10,7 @@ A native Android app for Codeberg (and other Forgejo/Gitea instances) that provi
 |-------|-----------|
 | Language | Rust (core + backend) |
 | App Shell | Tauri Mobile (v2) — native Android WebView shell |
-| UI | Leptos (Rust → WASM) or HTML/CSS/TypeScript frontend |
+| UI | Leptos (Rust → WASM) — reactive frontend framework |
 | Networking | reqwest (async HTTP client) |
 | API Spec | Custom Forgejo API client crate (typed, from OpenAPI spec) |
 | Auth | OAuth2 (Authorization Code + PKCE) via custom Rust implementation |
@@ -25,32 +25,27 @@ A native Android app for Codeberg (and other Forgejo/Gitea instances) that provi
 | Min SDK | 26 (Android 8.0) |
 | Target SDK | 35 |
 
-### Why Tauri Mobile?
+### Why Tauri Mobile + Leptos?
 
 Tauri v2 supports Android (and iOS) as build targets. The app runs as a native Android app with:
 - A Rust backend process handling all logic, networking, and state
-- A WebView frontend for UI rendering
+- A Leptos frontend compiled to WASM, rendered in the native WebView
 - Tauri's IPC bridge connecting the two
 - Access to native Android APIs via Tauri plugins (notifications, deep links, secure storage, etc.)
 
-This gives us the full power of Rust for business logic while still having a flexible UI layer.
-
-### Alternative: Fully Native with `android-activity`
-
-For a pure Rust approach without WebView:
-- Use the `android-activity` crate for the Android entry point
-- Use `wgpu` + `egui` for GPU-rendered UI
-- Full Rust stack with no web technologies
-- Trade-off: less mature mobile UI ecosystem, harder to get native-feeling widgets
-
-The Tauri approach is recommended for better UI flexibility and ecosystem maturity.
+Leptos provides:
+- Fine-grained reactivity (signals, not virtual DOM diffing)
+- Server functions / Tauri command integration
+- Component-based architecture familiar to anyone who's used React/Solid
+- The entire app is Rust — no context switching between languages
+- `trunk` builds the WASM bundle served by Tauri's WebView
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────┐
 │                  UI Layer                            │
-│   WebView Frontend (Leptos/WASM or HTML/TS)         │
+│   Leptos Components (Rust → WASM in WebView)        │
 │   Tauri IPC Commands ←→ Rust Backend                │
 ├─────────────────────────────────────────────────────┤
 │              Tauri Rust Backend                      │
@@ -175,7 +170,7 @@ The Tauri approach is recommended for better UI flexibility and ecosystem maturi
 - Android intent filters for Codeberg URLs
 
 #### 3.3 Theming
-- Light/Dark/System theme via CSS variables + media query
+- Light/Dark/System theme via Leptos signals + CSS variables
 - Material Design 3 styling via CSS
 - Per-instance accent color
 
@@ -255,6 +250,8 @@ Authorization: Bearer <OAuth2 token>
 ```
 codeberg-app/
 ├── Cargo.toml                              # Workspace root
+├── Trunk.toml                              # Trunk build config for Leptos WASM
+├── index.html                              # Trunk entry point (loads WASM)
 ├── src-tauri/
 │   ├── Cargo.toml                          # Tauri app crate
 │   ├── tauri.conf.json                     # Tauri config (Android target)
@@ -297,68 +294,174 @@ codeberg-app/
 │           ├── mod.rs
 │           ├── diff.rs                     # Unified diff parser
 │           └── markdown.rs                 # pulldown-cmark wrapper
-├── src/                                    # Frontend (WebView)
-│   ├── index.html
-│   ├── main.ts                             # Entry point
+├── src/                                    # Leptos frontend (Rust → WASM)
+│   ├── lib.rs                              # Leptos app entry + mount
+│   ├── app.rs                              # Root component + leptos_router
+│   ├── api.rs                              # Tauri invoke wrappers (wasm-bindgen)
 │   ├── styles/
 │   │   ├── global.css                      # Base styles + Material tokens
 │   │   ├── theme.css                       # Light/dark theme variables
 │   │   └── components/                     # Per-component styles
-│   ├── lib/
-│   │   ├── api.ts                          # Tauri invoke wrappers
-│   │   ├── router.ts                       # Client-side routing
-│   │   └── store.ts                        # Reactive state
 │   ├── components/
-│   │   ├── MarkdownView.ts                 # Rendered markdown display
-│   │   ├── DiffView.ts                     # PR diff viewer
-│   │   ├── CodeView.ts                     # Syntax-highlighted file viewer
-│   │   ├── IssueCard.ts                    # Issue list item
-│   │   ├── PrCard.ts                       # PR list item
-│   │   ├── RepoCard.ts                     # Repo list item
-│   │   └── NotificationItem.ts             # Notification list item
+│   │   ├── mod.rs
+│   │   ├── markdown_view.rs                # Rendered markdown display
+│   │   ├── diff_view.rs                    # PR diff viewer
+│   │   ├── code_view.rs                    # Syntax-highlighted file viewer
+│   │   ├── issue_card.rs                   # Issue list item
+│   │   ├── pr_card.rs                      # PR list item
+│   │   ├── repo_card.rs                    # Repo list item
+│   │   ├── notification_item.rs            # Notification list item
+│   │   ├── nav_bar.rs                      # Bottom navigation bar
+│   │   ├── instance_switcher.rs            # Account/instance switcher
+│   │   └── loading.rs                      # Loading/skeleton states
 │   └── pages/
-│       ├── Login.ts
-│       ├── Home.ts
-│       ├── RepoList.ts
-│       ├── RepoDetail.ts
-│       ├── FileTree.ts
-│       ├── FileView.ts
-│       ├── IssueList.ts
-│       ├── IssueDetail.ts
-│       ├── PrList.ts
-│       ├── PrDetail.ts
-│       ├── Notifications.ts
-│       └── Profile.ts
-├── package.json                            # Frontend dependencies (if TS)
+│       ├── mod.rs
+│       ├── login.rs                        # Login + instance setup
+│       ├── home.rs                         # Dashboard / notifications
+│       ├── repo_list.rs                    # Repository listing
+│       ├── repo_detail.rs                  # Repo overview (README, stats)
+│       ├── file_tree.rs                    # File browser
+│       ├── file_view.rs                    # Single file viewer
+│       ├── issue_list.rs                   # Issue listing + filters
+│       ├── issue_detail.rs                 # Issue thread
+│       ├── pr_list.rs                      # PR listing + filters
+│       ├── pr_detail.rs                    # PR thread + diff
+│       ├── notifications.rs                # Notification center
+│       └── profile.rs                      # User/org profile
 └── tests/
     ├── api_client_test.rs                  # Integration tests for API client
     ├── diff_parser_test.rs                 # Diff parsing tests
     └── cache_test.rs                       # SQLite cache tests
 ```
 
-### Alternative: Leptos (Full Rust Frontend)
+## Leptos Frontend Patterns
 
-If you want the frontend in Rust too (no TypeScript), replace the `src/` frontend with Leptos:
+### Tauri IPC from WASM
 
+Leptos components call Tauri commands via `wasm-bindgen` bindings:
+
+```rust
+// src/api.rs
+
+use serde::{de::DeserializeOwned, Serialize};
+use wasm_bindgen::prelude::*;
+
+#[wasm_bindgen]
+extern "C" {
+    #[wasm_bindgen(js_namespace = ["window", "__TAURI__", "core"])]
+    async fn invoke(cmd: &str, args: JsValue) -> JsValue;
+}
+
+pub async fn tauri_invoke<A: Serialize, R: DeserializeOwned>(
+    command: &str,
+    args: &A,
+) -> Result<R, String> {
+    let args_js = serde_wasm_bindgen::to_value(args)
+        .map_err(|e| e.to_string())?;
+    let result = invoke(command, args_js).await;
+    serde_wasm_bindgen::from_value(result)
+        .map_err(|e| e.to_string())
+}
 ```
-src/                                        # Leptos frontend (compiles to WASM)
-├── lib.rs                                  # Leptos app entry
-├── app.rs                                  # Root component + router
-├── api.rs                                  # Tauri invoke bindings (wasm-bindgen)
-├── components/
-│   ├── markdown_view.rs
-│   ├── diff_view.rs
-│   ├── code_view.rs
-│   └── ...
-└── pages/
-    ├── login.rs
-    ├── home.rs
-    ├── repo_list.rs
-    ├── repo_detail.rs
-    └── ...
+
+### Component Example
+
+```rust
+// src/pages/repo_list.rs
+
+use leptos::*;
+use crate::api::tauri_invoke;
+use crate::components::repo_card::RepoCard;
+
+#[component]
+pub fn RepoList() -> impl IntoView {
+    let repos = create_resource(
+        || (),
+        |_| async move {
+            tauri_invoke::<_, Vec<Repository>>("list_repos", &()).await
+        },
+    );
+
+    view! {
+        <div class="repo-list">
+            <h1>"Repositories"</h1>
+            <Suspense fallback=move || view! { <p>"Loading..."</p> }>
+                {move || repos.get().map(|result| match result {
+                    Ok(repos) => view! {
+                        <For
+                            each=move || repos.clone()
+                            key=|repo| repo.id
+                            children=move |repo| view! { <RepoCard repo=repo /> }
+                        />
+                    }.into_view(),
+                    Err(e) => view! { <p class="error">{e}</p> }.into_view(),
+                })}
+            </Suspense>
+        </div>
+    }
+}
 ```
 
-This uses `trunk` to build the WASM bundle served by Tauri's WebView.
+### Routing
+
+```rust
+// src/app.rs
+
+use leptos::*;
+use leptos_router::*;
+use crate::pages::*;
+
+#[component]
+pub fn App() -> impl IntoView {
+    view! {
+        <Router>
+            <main>
+                <Routes>
+                    <Route path="/login" view=Login />
+                    <Route path="/" view=Home />
+                    <Route path="/repos" view=RepoList />
+                    <Route path="/repos/:owner/:name" view=RepoDetail />
+                    <Route path="/repos/:owner/:name/issues" view=IssueList />
+                    <Route path="/repos/:owner/:name/issues/:index" view=IssueDetail />
+                    <Route path="/repos/:owner/:name/pulls" view=PrList />
+                    <Route path="/repos/:owner/:name/pulls/:index" view=PrDetail />
+                    <Route path="/repos/:owner/:name/tree/*path" view=FileTree />
+                    <Route path="/repos/:owner/:name/blob/*path" view=FileView />
+                    <Route path="/notifications" view=Notifications />
+                    <Route path="/profile/:username" view=Profile />
+                </Routes>
+            </main>
+            <NavBar />
+        </Router>
+    }
+}
+```
+
+### Global State
+
+```rust
+// src/lib.rs
+
+use leptos::*;
+
+#[derive(Clone)]
+pub struct AppState {
+    pub active_instance: RwSignal<Option<Instance>>,
+    pub current_user: RwSignal<Option<User>>,
+    pub theme: RwSignal<Theme>,
+    pub unread_count: RwSignal<u32>,
+}
+
+pub fn provide_app_state() {
+    let state = AppState {
+        active_instance: create_rw_signal(None),
+        current_user: create_rw_signal(None),
+        theme: create_rw_signal(Theme::System),
+        unread_count: create_rw_signal(0),
+    };
+    provide_context(state);
+}
+```
 
 ## Multi-Instance Support
 
@@ -476,8 +579,8 @@ pub struct DiffLine {
 ```
 
 3. Send parsed structs to frontend via Tauri IPC
-4. Render as collapsible file cards with color-coded lines
-5. Syntax highlight via syntect (in Rust) or highlight.js (in frontend)
+4. Render as Leptos components — collapsible file cards with color-coded lines
+5. Syntax highlight via syntect (in the Tauri backend, returned as HTML spans)
 
 ## Testing Strategy
 
@@ -488,7 +591,7 @@ pub struct DiffLine {
 | Diff Parser | `#[test]` with fixture files |
 | Cache/DB | rusqlite in-memory database tests |
 | Tauri Commands | tauri-test for command handler testing |
-| Frontend | Playwright or WebDriver for E2E |
+| Leptos Components | wasm-bindgen-test + Playwright for E2E |
 | CI | Forgejo Actions workflow running on Codeberg |
 
 ## Build & Distribution
