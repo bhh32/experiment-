@@ -262,8 +262,8 @@ codeberg-app/
 │   ├── icons/                              # App icons
 │   └── src/
 │       ├── main.rs                         # Tauri entry point
-│       ├── commands/                        # Tauri IPC command handlers
-│       │   ├── mod.rs
+│       ├── commands.rs                     # Declares command submodules
+│       ├── commands/
 │       │   ├── auth.rs                     # login, logout, add_instance
 │       │   ├── repos.rs                    # list_repos, get_repo, search
 │       │   ├── issues.rs                   # list_issues, create_issue, comment
@@ -271,30 +271,30 @@ codeberg-app/
 │       │   ├── notifications.rs            # list_notifications, mark_read
 │       │   ├── user.rs                     # get_profile, list_orgs
 │       │   └── actions.rs                  # list_runs, get_logs
+│       ├── api.rs                          # Declares api submodules
 │       ├── api/
-│       │   ├── mod.rs
 │       │   ├── client.rs                   # ForgejoClient (reqwest)
 │       │   ├── models.rs                   # API response/request structs
 │       │   └── error.rs                    # API error types
+│       ├── auth.rs                         # Declares auth submodules
 │       ├── auth/
-│       │   ├── mod.rs
 │       │   ├── oauth2.rs                   # OAuth2 PKCE flow
 │       │   └── token_store.rs              # Secure token persistence
+│       ├── instance.rs                     # Declares instance submodules
 │       ├── instance/
-│       │   ├── mod.rs
 │       │   └── manager.rs                  # Multi-instance registry
+│       ├── cache.rs                        # Declares cache submodules
 │       ├── cache/
-│       │   ├── mod.rs
 │       │   ├── db.rs                       # SQLite schema + migrations
 │       │   └── offline.rs                  # Offline queue
+│       ├── notifications.rs                # Declares notifications submodules
 │       ├── notifications/
-│       │   ├── mod.rs
 │       │   └── poller.rs                   # Background polling task
+│       ├── util.rs                         # Declares util submodules
 │       └── util/
-│           ├── mod.rs
 │           ├── diff.rs                     # Unified diff parser
 │           └── markdown.rs                 # pulldown-cmark wrapper
-├── src/                                    # Leptos frontend (Rust → WASM)
+├── src/                                    # Leptos frontend (Rust -> WASM)
 │   ├── lib.rs                              # Leptos app entry + mount
 │   ├── app.rs                              # Root component + leptos_router
 │   ├── api.rs                              # Tauri invoke wrappers (wasm-bindgen)
@@ -302,8 +302,8 @@ codeberg-app/
 │   │   ├── global.css                      # Base styles + Material tokens
 │   │   ├── theme.css                       # Light/dark theme variables
 │   │   └── components/                     # Per-component styles
+│   ├── components.rs                       # Declares component submodules
 │   ├── components/
-│   │   ├── mod.rs
 │   │   ├── markdown_view.rs                # Rendered markdown display
 │   │   ├── diff_view.rs                    # PR diff viewer
 │   │   ├── code_view.rs                    # Syntax-highlighted file viewer
@@ -314,8 +314,8 @@ codeberg-app/
 │   │   ├── nav_bar.rs                      # Bottom navigation bar
 │   │   ├── instance_switcher.rs            # Account/instance switcher
 │   │   └── loading.rs                      # Loading/skeleton states
+│   ├── pages.rs                            # Declares page submodules
 │   └── pages/
-│       ├── mod.rs
 │       ├── login.rs                        # Login + instance setup
 │       ├── home.rs                         # Dashboard / notifications
 │       ├── repo_list.rs                    # Repository listing
