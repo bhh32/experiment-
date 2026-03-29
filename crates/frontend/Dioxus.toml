@@ -1,0 +1,13 @@
+[application]
+name = "docs-clone"
+
+[web.app]
+title = "Docs Clone"
+
+[web.resource]
+style = ["/assets/main.css"]
+script = ["/assets/editor.js"]
+
+[web.resource.dev]
+style = []
+script = []

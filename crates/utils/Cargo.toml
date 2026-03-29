@@ -1,0 +1,11 @@
+[package]
+name = "utils"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+shared = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3.15"

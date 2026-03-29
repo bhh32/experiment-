@@ -1,0 +1,10 @@
+services:
+  docs-clone:
+    build: .
+    ports:
+      - "8080:8080"
+    volumes:
+      - "${DOCS_DIR:-~/Documents}:/data"
+    environment:
+      - DATA_DIR=/data
+      - PUBLIC_DIR=/app/public

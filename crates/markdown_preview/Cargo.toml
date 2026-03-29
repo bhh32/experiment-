@@ -1,0 +1,7 @@
+[package]
+name = "markdown_preview"
+version.workspace = true
+edition.workspace = true
+
+[dependencies]
+comrak = { workspace = true }

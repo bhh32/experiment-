@@ -1,0 +1,175 @@
+/// Pure string manipulation functions for markdown formatting.
+/// These take the editor content, cursor position, and return
+/// the new content and new cursor position.
+
+pub mod formatting {
+    /// Wrap selected text (or insert at cursor) with bold markers.
+    pub fn toggle_bold(content: &str, cursor: usize) -> (String, usize) {
+        wrap_markers(content, cursor, "**")
+    }
+
+    /// Wrap selected text (or insert at cursor) with italic markers.
+    pub fn toggle_italic(content: &str, cursor: usize) -> (String, usize) {
+        wrap_markers(content, cursor, "*")
+    }
+
+    /// Insert a heading at the current line.
+    pub fn insert_heading(content: &str, cursor: usize, level: u8) -> (String, usize) {
+        let prefix = format!("{} ", "#".repeat(level as usize));
+        insert_line_prefix(content, cursor, &prefix)
+    }
+
+    /// Insert an unordered list marker at the current line.
+    pub fn insert_list(content: &str, cursor: usize) -> (String, usize) {
+        insert_line_prefix(content, cursor, "- ")
+    }
+
+    /// Insert an ordered list marker at the current line.
+    pub fn insert_ordered_list(content: &str, cursor: usize) -> (String, usize) {
+        insert_line_prefix(content, cursor, "1. ")
+    }
+
+    /// Insert a link template at cursor.
+    pub fn insert_link(content: &str, cursor: usize) -> (String, usize) {
+        let insertion = "[link text](url)";
+        let mut result = String::with_capacity(content.len() + insertion.len());
+        result.push_str(&content[..cursor]);
+        result.push_str(insertion);
+        result.push_str(&content[cursor..]);
+        // Place cursor at "link text" for easy editing
+        (result, cursor + 1)
+    }
+
+    /// Insert a code block at cursor.
+    pub fn insert_code_block(content: &str, cursor: usize) -> (String, usize) {
+        let block = "```\n\n```";
+        let mut result = String::with_capacity(content.len() + block.len() + 2);
+
+        // Add newline before if not at start of line
+        let needs_newline = cursor > 0 && content.as_bytes().get(cursor - 1) != Some(&b'\n');
+
+        result.push_str(&content[..cursor]);
+        if needs_newline {
+            result.push('\n');
+        }
+        result.push_str(block);
+        result.push_str(&content[cursor..]);
+
+        let new_cursor = if needs_newline {
+            cursor + 5 // \n``` + \n
+        } else {
+            cursor + 4 // ``` + \n
+        };
+        (result, new_cursor)
+    }
+
+    /// Insert a horizontal rule at cursor.
+    pub fn insert_hr(content: &str, cursor: usize) -> (String, usize) {
+        let hr = "\n---\n";
+        let mut result = String::with_capacity(content.len() + hr.len());
+        result.push_str(&content[..cursor]);
+        result.push_str(hr);
+        result.push_str(&content[cursor..]);
+        (result, cursor + hr.len())
+    }
+
+    fn wrap_markers(content: &str, cursor: usize, marker: &str) -> (String, usize) {
+        let mut result = String::with_capacity(content.len() + marker.len() * 2);
+        result.push_str(&content[..cursor]);
+        result.push_str(marker);
+        result.push_str(marker);
+        result.push_str(&content[cursor..]);
+        (result, cursor + marker.len())
+    }
+
+    fn insert_line_prefix(content: &str, cursor: usize, prefix: &str) -> (String, usize) {
+        // Find start of current line
+        let line_start = content[..cursor]
+            .rfind('\n')
+            .map(|p| p + 1)
+            .unwrap_or(0);
+
+        let mut result = String::with_capacity(content.len() + prefix.len());
+        result.push_str(&content[..line_start]);
+        result.push_str(prefix);
+        result.push_str(&content[line_start..]);
+        (result, cursor + prefix.len())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::formatting::*;
+
+    #[test]
+    fn bold_empty() {
+        let (text, pos) = toggle_bold("", 0);
+        assert_eq!(text, "****");
+        assert_eq!(pos, 2);
+    }
+
+    #[test]
+    fn bold_at_cursor() {
+        let (text, pos) = toggle_bold("hello world", 5);
+        assert_eq!(text, "hello**** world");
+        assert_eq!(pos, 7);
+    }
+
+    #[test]
+    fn italic_empty() {
+        let (text, pos) = toggle_italic("", 0);
+        assert_eq!(text, "**");
+        assert_eq!(pos, 1);
+    }
+
+    #[test]
+    fn heading_level_1() {
+        let (text, _) = insert_heading("hello", 0, 1);
+        assert_eq!(text, "# hello");
+    }
+
+    #[test]
+    fn heading_level_2() {
+        let (text, _) = insert_heading("hello", 0, 2);
+        assert_eq!(text, "## hello");
+    }
+
+    #[test]
+    fn heading_level_3() {
+        let (text, _) = insert_heading("hello", 0, 3);
+        assert_eq!(text, "### hello");
+    }
+
+    #[test]
+    fn unordered_list() {
+        let (text, _) = insert_list("item", 0);
+        assert_eq!(text, "- item");
+    }
+
+    #[test]
+    fn ordered_list() {
+        let (text, _) = insert_ordered_list("item", 0);
+        assert_eq!(text, "1. item");
+    }
+
+    #[test]
+    fn link_insertion() {
+        let (text, pos) = insert_link("", 0);
+        assert_eq!(text, "[link text](url)");
+        assert_eq!(pos, 1); // cursor inside []
+    }
+
+    #[test]
+    fn code_block_at_start() {
+        let (text, pos) = insert_code_block("", 0);
+        assert_eq!(text, "```\n\n```");
+        assert_eq!(pos, 4); // cursor between the fences
+    }
+
+    #[test]
+    fn hr_insertion() {
+        let (text, _) = insert_hr("above", 5);
+        assert!(text.contains("---"));
+        assert!(text.starts_with("above"));
+    }
+}

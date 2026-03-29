@@ -1,0 +1,33 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/shared",
+    "crates/utils",
+    "crates/file_ops",
+    "crates/conversion",
+    "crates/markdown_preview",
+    "crates/toolbar",
+    "crates/backend",
+    "crates/frontend",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+
+[workspace.dependencies]
+shared = { path = "crates/shared" }
+utils = { path = "crates/utils" }
+file_ops = { path = "crates/file_ops" }
+conversion = { path = "crates/conversion" }
+markdown_preview = { path = "crates/markdown_preview" }
+toolbar = { path = "crates/toolbar" }
+
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+thiserror = "2.0"
+anyhow = "1.0"
+tokio = { version = "1.44", features = ["full"] }
+comrak = "0.36"
+docx-rs = "0.4"

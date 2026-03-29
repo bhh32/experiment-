@@ -1,0 +1,4 @@
+[package]
+name = "toolbar"
+version.workspace = true
+edition.workspace = true
