@@ -1,0 +1,439 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+html, body {
+    height: 100%;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    -webkit-font-smoothing: antialiased;
+}
+
+a {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+a:hover {
+    text-decoration: underline;
+}
+
+button {
+    cursor: pointer;
+    border: none;
+    border-radius: 8px;
+    padding: 10px 16px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    background: var(--accent);
+    color: var(--text-on-accent);
+    transition: opacity 0.15s;
+}
+
+button:hover {
+    opacity: 0.9;
+}
+
+button:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+input {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-size: 1rem;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+}
+
+input:focus {
+    outline: 2px solid var(--accent);
+    border-color: transparent;
+}
+
+label {
+    display: block;
+    margin-bottom: 4px;
+    font-weight: 500;
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+h1 { font-size: 1.5rem; font-weight: 600; }
+h2 { font-size: 1.25rem; font-weight: 600; }
+
+/* Layout */
+
+.app-container {
+    padding: 16px;
+    padding-bottom: 72px; /* space for nav bar */
+    max-width: 600px;
+    margin: 0 auto;
+}
+
+/* Nav bar */
+
+.nav-bar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    display: flex;
+    justify-content: space-around;
+    padding: 8px 0;
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    z-index: 100;
+}
+
+.nav-item {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2px;
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    padding: 4px 12px;
+    min-width: 64px;
+}
+
+.nav-item:hover {
+    color: var(--accent);
+    text-decoration: none;
+}
+
+.nav-icon { font-size: 1.25rem; }
+
+/* Cards */
+
+.repo-card, .issue-card, .pr-card {
+    display: block;
+    padding: 12px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    margin-bottom: 8px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    transition: border-color 0.15s;
+}
+
+.repo-card:hover, .issue-card:hover, .pr-card:hover {
+    border-color: var(--accent);
+    text-decoration: none;
+}
+
+.repo-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 4px;
+}
+
+.repo-avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+}
+
+.repo-name { font-weight: 600; }
+
+.repo-description {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+}
+
+.repo-stats, .issue-meta, .pr-meta {
+    display: flex;
+    gap: 12px;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+/* Issues */
+
+.issue-header, .pr-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.issue-number, .pr-number {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+}
+
+.issue-title, .pr-title {
+    font-weight: 500;
+}
+
+.issue-labels {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+    flex-wrap: wrap;
+}
+
+.label {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    color: #fff;
+}
+
+/* PR status badges */
+
+.pr-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.pr-status.open { background: #238636; color: #fff; }
+.pr-status.closed { background: #da3633; color: #fff; }
+.pr-status.merged { background: #8957e5; color: #fff; }
+
+.issue-state {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.issue-state.open { background: #238636; color: #fff; }
+.issue-state.closed { background: #da3633; color: #fff; }
+
+/* Notifications */
+
+.notification {
+    padding: 12px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
+
+.notification.unread {
+    background: var(--bg-highlight);
+}
+
+.notification-type {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    background: var(--bg-tertiary);
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+
+/* Profile */
+
+.profile-header {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin-bottom: 24px;
+}
+
+.profile-avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+}
+
+.profile-login {
+    color: var(--text-secondary);
+}
+
+/* Login */
+
+.login-page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 80vh;
+}
+
+.login-subtitle {
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+}
+
+.login-form {
+    width: 100%;
+    max-width: 320px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.login-button {
+    margin-top: 8px;
+    width: 100%;
+}
+
+/* Diff view */
+
+.diff-file {
+    margin-bottom: 16px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+}
+
+.diff-file-header {
+    padding: 8px 12px;
+    background: var(--bg-tertiary);
+    font-family: monospace;
+    font-size: 0.875rem;
+    cursor: pointer;
+}
+
+.diff-line {
+    display: flex;
+    font-family: monospace;
+    font-size: 0.8rem;
+    line-height: 1.4;
+}
+
+.diff-line.addition { background: var(--diff-add-bg); }
+.diff-line.deletion { background: var(--diff-del-bg); }
+
+.line-no {
+    display: inline-block;
+    width: 40px;
+    text-align: right;
+    padding: 0 8px;
+    color: var(--text-secondary);
+    user-select: none;
+    flex-shrink: 0;
+}
+
+.line-content {
+    padding: 0 8px;
+    white-space: pre;
+    overflow-x: auto;
+}
+
+/* Instance switcher */
+
+.instance-switcher {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.instance-item {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 8px 12px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    text-align: left;
+}
+
+.instance-item.active {
+    border-color: var(--accent);
+}
+
+.instance-url {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+}
+
+/* Utilities */
+
+.error-message {
+    color: var(--error);
+    padding: 12px;
+    background: var(--error-bg);
+    border-radius: 8px;
+}
+
+.empty-state {
+    text-align: center;
+    color: var(--text-secondary);
+    padding: 40px 0;
+}
+
+.loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    padding: 40px 0;
+    color: var(--text-secondary);
+}
+
+.loading-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+    margin-bottom: 8px;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+.repo-grid, .issue-list, .pr-list, .notification-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.repo-actions {
+    display: flex;
+    gap: 12px;
+    margin-top: 16px;
+}
+
+.action-link {
+    padding: 8px 16px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    font-weight: 500;
+}
+
+.notifications-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.mark-read-button {
+    font-size: 0.8rem;
+    padding: 6px 12px;
+    background: var(--bg-secondary);
+    color: var(--text-primary);
+    border: 1px solid var(--border);
+}
+
+.raw-diff {
+    font-family: monospace;
+    font-size: 0.8rem;
+    padding: 12px;
+    background: var(--bg-secondary);
+    border-radius: 8px;
+    overflow-x: auto;
+    white-space: pre;
+}

@@ -1,0 +1,10 @@
+pub mod home;
+pub mod issue_detail;
+pub mod issue_list;
+pub mod login;
+pub mod notifications;
+pub mod pr_detail;
+pub mod pr_list;
+pub mod profile;
+pub mod repo_detail;
+pub mod repo_list;

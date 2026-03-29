@@ -1,0 +1,11 @@
+{
+  "identifier": "default",
+  "description": "Default capabilities for the Codeberg app",
+  "windows": ["main"],
+  "permissions": [
+    "core:default",
+    "notification:default",
+    "notification:allow-notify",
+    "shell:allow-open"
+  ]
+}
