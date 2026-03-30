@@ -21,8 +21,8 @@ pub fn PreviewPane(
 
         let processed = preprocess_markdown(&text);
         let mut base_html = markdown_preview::render_preview(&processed.clean_md);
-        base_html = apply_alignments(&base_html, &processed.alignments);
-        base_html = insert_page_breaks(&base_html, &processed.page_break_indices);
+        base_html = apply_alignments_by_content(&base_html, &processed.align_map);
+        base_html = apply_page_breaks(&base_html, &processed.page_break_after);
 
         match m.as_str() {
             "docx" => render_docx_preview(&base_html, &ds),
@@ -41,25 +41,22 @@ pub fn PreviewPane(
 
 struct ProcessedMarkdown {
     clean_md: String,
-    alignments: Vec<String>,
-    page_break_indices: Vec<usize>, // paragraph indices that should have a page break before them
+    /// Map from stripped text content -> alignment (e.g. "My Title" -> "center")
+    align_map: Vec<(String, String)>,
+    /// Text content of paragraphs that should have a page break BEFORE them
+    page_break_after: Vec<String>,
 }
 
-/// Pre-process markdown: strip alignment prefixes, handle {pagebreak},
-/// and preserve blank lines as explicit spacing.
 fn preprocess_markdown(markdown: &str) -> ProcessedMarkdown {
     let mut clean_lines: Vec<String> = Vec::new();
-    let mut alignments: Vec<String> = Vec::new();
-    let mut page_break_indices: Vec<usize> = Vec::new();
-    let mut current_align = "left".to_string();
-    let mut para_count = 0;
+    let mut align_map: Vec<(String, String)> = Vec::new();
+    let mut page_break_after: Vec<String> = Vec::new();
     let mut consecutive_blanks = 0;
+    let mut next_has_page_break = false;
 
     for line in markdown.lines() {
-        // Handle page breaks
         if line.trim() == "{pagebreak}" {
-            page_break_indices.push(para_count);
-            // Add a blank line so comrak creates a paragraph boundary
+            next_has_page_break = true;
             clean_lines.push(String::new());
             consecutive_blanks = 0;
             continue;
@@ -69,31 +66,30 @@ fn preprocess_markdown(markdown: &str) -> ProcessedMarkdown {
 
         if text.trim().is_empty() {
             consecutive_blanks += 1;
-            // First blank line is a normal paragraph separator.
-            // Additional blank lines become explicit spacing (non-breaking space paragraph).
             if consecutive_blanks > 1 {
-                clean_lines.push("\u{00a0}".to_string()); // NBSP = visible empty paragraph
+                clean_lines.push("\u{00a0}".to_string());
             } else {
                 clean_lines.push(String::new());
             }
-            current_align = "left".to_string();
             continue;
         }
 
-        // This is a non-empty line
+        // Record alignment for this line's text content
         if align != "left" {
-            current_align = align.to_string();
+            // Strip markdown heading prefix to get the text that will appear in HTML
+            let display_text = text.trim().trim_start_matches('#').trim().to_string();
+            if !display_text.is_empty() {
+                align_map.push((display_text, align.to_string()));
+            }
         }
 
-        // Track if this starts a new paragraph (preceded by blank or is first)
-        let starts_para = clean_lines.is_empty() || {
-            let prev = clean_lines.last().map(|s| s.as_str()).unwrap_or("");
-            prev.is_empty() || prev == "\u{00a0}"
-        };
-
-        if starts_para {
-            alignments.push(current_align.clone());
-            para_count += 1;
+        // Record page break before this content
+        if next_has_page_break {
+            let display_text = text.trim().trim_start_matches('#').trim().to_string();
+            if !display_text.is_empty() {
+                page_break_after.push(display_text);
+            }
+            next_has_page_break = false;
         }
 
         consecutive_blanks = 0;
@@ -102,24 +98,39 @@ fn preprocess_markdown(markdown: &str) -> ProcessedMarkdown {
 
     ProcessedMarkdown {
         clean_md: clean_lines.join("\n"),
-        alignments,
-        page_break_indices,
+        align_map,
+        page_break_after,
     }
 }
 
-/// Post-process HTML to apply text-align to paragraphs/headings.
-fn apply_alignments(html: &str, alignments: &[String]) -> String {
-    let block_tags = ["<p>", "<h1>", "<h2>", "<h3>", "<h4>", "<h5>", "<h6>"];
-    let mut result = String::with_capacity(html.len() + alignments.len() * 30);
-    let mut para_idx = 0;
+/// Apply alignments by finding block elements whose text content matches.
+fn apply_alignments_by_content(html: &str, align_map: &[(String, String)]) -> String {
+    if align_map.is_empty() {
+        return html.to_string();
+    }
+
+    let mut result = String::with_capacity(html.len() + align_map.len() * 40);
 
     for line in html.lines() {
         let trimmed = line.trim();
-        let is_block = block_tags.iter().any(|tag| trimmed.starts_with(tag));
+        let mut matched = false;
 
-        if is_block {
-            if let Some(align) = alignments.get(para_idx) {
-                if align != "left" {
+        // Check if this is a block-level opening tag
+        if trimmed.starts_with("<p>")
+            || trimmed.starts_with("<h1>")
+            || trimmed.starts_with("<h2>")
+            || trimmed.starts_with("<h3>")
+            || trimmed.starts_with("<h4>")
+            || trimmed.starts_with("<h5>")
+            || trimmed.starts_with("<h6>")
+        {
+            // Extract text content (strip HTML tags)
+            let text_content = strip_tags(trimmed);
+            let text_trimmed = text_content.trim();
+
+            for (content, align) in align_map {
+                if text_trimmed.contains(content.as_str()) {
+                    // Insert style attribute into the opening tag
                     if let Some(close_bracket) = trimmed.find('>') {
                         let tag = &trimmed[..close_bracket];
                         let rest = &trimmed[close_bracket..];
@@ -127,42 +138,49 @@ fn apply_alignments(html: &str, alignments: &[String]) -> String {
                         result.push_str(&format!(r#" style="text-align:{align}""#));
                         result.push_str(rest);
                         result.push('\n');
-                        para_idx += 1;
-                        continue;
+                        matched = true;
+                        break;
                     }
                 }
             }
-            para_idx += 1;
         }
-        result.push_str(line);
-        result.push('\n');
+
+        if !matched {
+            result.push_str(line);
+            result.push('\n');
+        }
     }
 
     result
 }
 
-/// Insert page break dividers at the specified paragraph indices.
-fn insert_page_breaks(html: &str, page_break_indices: &[usize]) -> String {
-    if page_break_indices.is_empty() {
+/// Apply page breaks by inserting a page-break div before matching block elements.
+fn apply_page_breaks(html: &str, page_break_after: &[String]) -> String {
+    if page_break_after.is_empty() {
         return html.to_string();
     }
 
-    let block_tags = ["<p>", "<h1>", "<h2>", "<h3>", "<h4>", "<h5>", "<h6>",
-                      "<ul>", "<ol>", "<table>", "<pre>", "<blockquote>"];
-    let mut result = String::with_capacity(html.len() + page_break_indices.len() * 100);
-    let mut para_idx = 0;
+    let block_starts = ["<p", "<h1", "<h2", "<h3", "<h4", "<h5", "<h6",
+                        "<ul", "<ol", "<table", "<pre", "<blockquote"];
+    let mut result = String::with_capacity(html.len() + page_break_after.len() * 50);
 
     for line in html.lines() {
         let trimmed = line.trim();
-        let is_block = block_tags.iter().any(|tag| trimmed.starts_with(tag));
+        let is_block = block_starts.iter().any(|tag| trimmed.starts_with(tag));
 
         if is_block {
-            if page_break_indices.contains(&para_idx) {
-                result.push_str(r#"<div class="page-break"></div>"#);
-                result.push('\n');
+            let text_content = strip_tags(trimmed);
+            let text_trimmed = text_content.trim();
+
+            for content in page_break_after {
+                if text_trimmed.contains(content.as_str()) {
+                    result.push_str(r#"<div class="page-break"></div>"#);
+                    result.push('\n');
+                    break;
+                }
             }
-            para_idx += 1;
         }
+
         result.push_str(line);
         result.push('\n');
     }
@@ -170,8 +188,22 @@ fn insert_page_breaks(html: &str, page_break_indices: &[usize]) -> String {
     result
 }
 
-/// DOCX preview — uses the exact same DocStyle values as the DOCX export.
-/// Each page is rendered as a separate div with page dimensions.
+/// Strip HTML tags from a string, returning plain text content.
+fn strip_tags(html: &str) -> String {
+    let mut result = String::new();
+    let mut in_tag = false;
+    for ch in html.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => result.push(ch),
+            _ => {}
+        }
+    }
+    result
+}
+
+/// DOCX preview
 fn render_docx_preview(html: &str, ds: &DocStyle) -> String {
     let f = &ds.body_font;
     let body = ds.body_size_pt;
