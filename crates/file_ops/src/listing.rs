@@ -3,14 +3,35 @@ use std::path::Path;
 use shared::{FileFormat, SUPPORTED_EXTENSIONS};
 use crate::FileOpsError;
 
-/// List files in a directory, filtering to supported document formats.
+/// List files in a directory and subdirectories, filtering to supported document formats.
 pub async fn list_files(dir: &Path) -> Result<Vec<shared::FileEntry>, FileOpsError> {
     let mut entries = Vec::new();
+    list_files_recursive(dir, dir, &mut entries).await?;
+    entries.sort_by(|a, b| a.path.cmp(&b.path));
+    Ok(entries)
+}
+
+async fn list_files_recursive(
+    base: &Path,
+    dir: &Path,
+    entries: &mut Vec<shared::FileEntry>,
+) -> Result<(), FileOpsError> {
     let mut read_dir = tokio::fs::read_dir(dir).await?;
 
     while let Some(entry) = read_dir.next_entry().await? {
         let path = entry.path();
-        if !path.is_file() {
+        let file_type = entry.file_type().await?;
+
+        if file_type.is_dir() {
+            // Skip hidden directories
+            let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            if !name.starts_with('.') {
+                Box::pin(list_files_recursive(base, &path, entries)).await?;
+            }
+            continue;
+        }
+
+        if !file_type.is_file() {
             continue;
         }
 
@@ -24,6 +45,14 @@ pub async fn list_files(dir: &Path) -> Result<Vec<shared::FileEntry>, FileOpsErr
         }
 
         let metadata = entry.metadata().await?;
+
+        // Relative path from the base directory
+        let rel_path = path
+            .strip_prefix(base)
+            .unwrap_or(&path)
+            .to_string_lossy()
+            .to_string();
+
         let name = path
             .file_name()
             .and_then(|n| n.to_str())
@@ -32,16 +61,15 @@ pub async fn list_files(dir: &Path) -> Result<Vec<shared::FileEntry>, FileOpsErr
 
         if let Some(format) = FileFormat::from_extension(ext) {
             entries.push(shared::FileEntry {
-                name: name.clone(),
-                path: name,
+                name,
+                path: rel_path,
                 size_bytes: metadata.len(),
                 format,
             });
         }
     }
 
-    entries.sort_by(|a, b| a.name.cmp(&b.name));
-    Ok(entries)
+    Ok(())
 }
 
 #[cfg(test)]
@@ -75,5 +103,30 @@ mod tests {
         fs::write(tmp.path().join("test.md"), "hello world").unwrap();
         let files = list_files(tmp.path()).await.unwrap();
         assert_eq!(files[0].size_bytes, 11);
+    }
+
+    #[tokio::test]
+    async fn lists_subdirectories() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join("subdir")).unwrap();
+        fs::write(tmp.path().join("root.md"), "root").unwrap();
+        fs::write(tmp.path().join("subdir/nested.md"), "nested").unwrap();
+
+        let files = list_files(tmp.path()).await.unwrap();
+        let paths: Vec<&str> = files.iter().map(|f| f.path.as_str()).collect();
+        assert!(paths.contains(&"root.md"));
+        assert!(paths.contains(&"subdir/nested.md"));
+    }
+
+    #[tokio::test]
+    async fn skips_hidden_dirs() {
+        let tmp = tempfile::tempdir().unwrap();
+        fs::create_dir_all(tmp.path().join(".hidden")).unwrap();
+        fs::write(tmp.path().join(".hidden/secret.md"), "secret").unwrap();
+        fs::write(tmp.path().join("visible.md"), "visible").unwrap();
+
+        let files = list_files(tmp.path()).await.unwrap();
+        let names: Vec<&str> = files.iter().map(|f| f.name.as_str()).collect();
+        assert_eq!(names, vec!["visible.md"]);
     }
 }

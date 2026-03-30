@@ -28,7 +28,27 @@ async fn read_file(
 ) -> impl IntoResponse {
     match file_ops::read_file(&state.data_dir, &path).await {
         Ok(contents) => {
-            // If it's a text file, return as string. Otherwise binary.
+            // Auto-convert DOCX/ODF to markdown for the editor
+            if path.ends_with(".docx") {
+                match conversion::docx_to_markdown(&contents) {
+                    Ok(md) => return (StatusCode::OK, md).into_response(),
+                    Err(e) => return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to convert DOCX: {e}"),
+                    ).into_response(),
+                }
+            }
+            if path.ends_with(".odt") {
+                match conversion::odt_to_markdown(&contents) {
+                    Ok(md) => return (StatusCode::OK, md).into_response(),
+                    Err(e) => return (
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        format!("Failed to convert ODF: {e}"),
+                    ).into_response(),
+                }
+            }
+
+            // Text files returned as-is
             match String::from_utf8(contents.clone()) {
                 Ok(text) => (StatusCode::OK, text).into_response(),
                 Err(_) => (StatusCode::OK, contents).into_response(),
