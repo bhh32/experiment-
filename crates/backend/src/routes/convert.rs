@@ -5,7 +5,7 @@ use axum::{
     routing::post,
     Json,
 };
-use shared::{ConvertRequest, ConvertResponse, FileFormat};
+use shared::{ConvertRequest, ConvertResponse, DocStyle, FileFormat};
 
 use crate::state::AppState;
 
@@ -16,17 +16,20 @@ pub fn routes() -> Router<AppState> {
 async fn convert(Json(req): Json<ConvertRequest>) -> impl IntoResponse {
     match (req.from, req.to) {
         (FileFormat::Markdown, FileFormat::Docx) => {
-            let mut docx_style = conversion::DocStyle::default();
+            let mut style = DocStyle::default();
             if let Some(ref f) = req.font {
-                docx_style.body_font = f.clone();
+                style.body_font = f.clone();
             }
             if let Some(fs) = req.font_size {
-                docx_style.body_size_pt = fs;
+                style.body_size_pt = fs;
             }
             if let Some(lh) = req.line_height {
-                docx_style.line_spacing = lh;
+                style.line_spacing = lh;
             }
-            match conversion::markdown_to_docx_styled(&req.content, &docx_style) {
+
+            // Parse markdown → Document IR → DOCX (single source of truth)
+            let doc = document_ir::parse_markdown(&req.content);
+            match document_ir::render_to_docx(&doc, &style) {
                 Ok(bytes) => {
                     let encoded = base64_encode(&bytes);
                     let resp = ConvertResponse {
@@ -35,7 +38,7 @@ async fn convert(Json(req): Json<ConvertRequest>) -> impl IntoResponse {
                     };
                     (StatusCode::OK, Json(resp)).into_response()
                 }
-                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e.to_string()).into_response(),
+                Err(e) => (StatusCode::INTERNAL_SERVER_ERROR, e).into_response(),
             }
         }
         (FileFormat::Markdown, FileFormat::Odt) => {

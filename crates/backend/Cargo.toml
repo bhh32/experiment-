@@ -9,6 +9,7 @@ file_ops = { workspace = true }
 conversion = { workspace = true }
 markdown_preview = { workspace = true }
 utils = { workspace = true }
+document_ir = { workspace = true }
 
 axum = { version = "0.8", features = ["json"] }
 tokio = { workspace = true }
