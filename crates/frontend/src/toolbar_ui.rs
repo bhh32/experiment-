@@ -245,6 +245,12 @@ pub fn ToolbarUi(
                 onclick: move |_| apply_format(&mut content, toolbar::formatting::insert_hr),
                 "HR"
             }
+            button {
+                class: "tool-btn",
+                title: "Page Break",
+                onclick: move |_| apply_format(&mut content, toolbar::formatting::insert_page_break),
+                "PgBrk"
+            }
         }
     }
 }

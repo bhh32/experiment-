@@ -38,44 +38,62 @@ pub fn markdown_to_docx(markdown: &str) -> Result<Vec<u8>, ConversionError> {
     markdown_to_docx_styled(markdown, &DocxStyle::default())
 }
 
-/// Pre-process markdown to extract alignment prefixes.
-/// Returns (cleaned markdown, map of paragraph text -> alignment).
-fn preprocess_alignments(markdown: &str) -> (String, std::collections::HashMap<String, AlignmentType>) {
+struct DocxPreprocessed {
+    clean_md: String,
+    alignments: std::collections::HashMap<String, AlignmentType>,
+    page_break_texts: std::collections::HashSet<String>, // first text of paragraphs after page breaks
+}
+
+/// Pre-process markdown to extract alignment prefixes and page breaks.
+fn preprocess_markdown(markdown: &str) -> DocxPreprocessed {
     let mut clean_lines = Vec::new();
     let mut alignments = std::collections::HashMap::new();
+    let mut page_break_texts = std::collections::HashSet::new();
+    let mut next_has_page_break = false;
 
     for line in markdown.lines() {
-        if let Some(rest) = line.strip_prefix("{center}") {
-            let key = rest.trim().to_string();
-            if !key.is_empty() {
-                alignments.insert(key, AlignmentType::Center);
-            }
-            clean_lines.push(rest.to_string());
-        } else if let Some(rest) = line.strip_prefix("{right}") {
-            let key = rest.trim().to_string();
-            if !key.is_empty() {
-                alignments.insert(key, AlignmentType::Right);
-            }
-            clean_lines.push(rest.to_string());
-        } else if let Some(rest) = line.strip_prefix("{justify}") {
-            let key = rest.trim().to_string();
-            if !key.is_empty() {
-                alignments.insert(key, AlignmentType::Justified);
-            }
-            clean_lines.push(rest.to_string());
-        } else {
-            clean_lines.push(line.to_string());
+        if line.trim() == "{pagebreak}" {
+            next_has_page_break = true;
+            clean_lines.push(String::new());
+            continue;
         }
+
+        let (stripped, align) = if let Some(rest) = line.strip_prefix("{center}") {
+            (rest, Some(AlignmentType::Center))
+        } else if let Some(rest) = line.strip_prefix("{right}") {
+            (rest, Some(AlignmentType::Right))
+        } else if let Some(rest) = line.strip_prefix("{justify}") {
+            (rest, Some(AlignmentType::Justified))
+        } else {
+            (line, None)
+        };
+
+        let key = stripped.trim().to_string();
+        if !key.is_empty() {
+            if let Some(a) = align {
+                alignments.insert(key.clone(), a);
+            }
+            if next_has_page_break {
+                page_break_texts.insert(key);
+                next_has_page_break = false;
+            }
+        }
+
+        clean_lines.push(stripped.to_string());
     }
 
-    (clean_lines.join("\n"), alignments)
+    DocxPreprocessed {
+        clean_md: clean_lines.join("\n"),
+        alignments,
+        page_break_texts,
+    }
 }
 
 /// Convert markdown to a fully-formatted DOCX byte buffer with custom styling.
 pub fn markdown_to_docx_styled(markdown: &str, style: &DocxStyle) -> Result<Vec<u8>, ConversionError> {
-    let (clean_md, alignments) = preprocess_alignments(markdown);
+    let preprocessed = preprocess_markdown(markdown);
     let arena = Arena::new();
-    let root = parse_document(&arena, &clean_md, &gfm_options());
+    let root = parse_document(&arena, &preprocessed.clean_md, &gfm_options());
 
     let mut doc = Docx::new();
 
@@ -154,7 +172,7 @@ pub fn markdown_to_docx_styled(markdown: &str, style: &DocxStyle) -> Result<Vec<
         .add_numbering(Numbering::new(2, 2));
 
     // Walk the AST and build the document
-    convert_children(root, &mut doc, 0, style, &alignments);
+    convert_children(root, &mut doc, 0, style, &preprocessed.alignments, &preprocessed.page_break_texts);
 
     let mut buf = Vec::new();
     doc.build()
@@ -171,6 +189,7 @@ fn convert_children<'a>(
     list_depth: usize,
     style: &DocxStyle,
     alignments: &std::collections::HashMap<String, AlignmentType>,
+    page_breaks: &std::collections::HashSet<String>,
 ) {
     for child in node.children() {
         let ast = child.data.borrow();
@@ -196,10 +215,13 @@ fn convert_children<'a>(
                     para = para.add_run(run);
                 }
 
-                // Check alignment
+                // Check alignment and page breaks
                 let first_text = get_first_text(child);
                 if let Some(align) = alignments.get(first_text.trim()) {
                     para = para.align(*align);
+                }
+                if page_breaks.contains(first_text.trim()) {
+                    para = para.page_break_before(true);
                 }
 
                 para = para.line_spacing(
@@ -247,10 +269,13 @@ fn convert_children<'a>(
                     }
                 }
 
-                // Check first text node for alignment match
+                // Check alignment and page breaks
                 let first_text = get_first_text(child);
                 if let Some(align) = alignments.get(first_text.trim()) {
                     para = para.align(*align);
+                }
+                if page_breaks.contains(first_text.trim()) {
+                    para = para.page_break_before(true);
                 }
 
                 for mut run in runs {
@@ -290,7 +315,7 @@ fn convert_children<'a>(
                         *doc = std::mem::take(doc).add_paragraph(para);
                     } else {
                         drop(bq_ast);
-                        convert_children(bq_child, doc, list_depth, style, alignments);
+                        convert_children(bq_child, doc, list_depth, style, alignments, page_breaks);
                     }
                 }
             }
@@ -331,13 +356,13 @@ fn convert_children<'a>(
                 drop(ast);
                 let new_depth = list_depth + if list_depth > 0 { 1 } else { 0 };
                 for item_child in child.children() {
-                    convert_children(item_child, doc, new_depth, style, alignments);
+                    convert_children(item_child, doc, new_depth, style, alignments, page_breaks);
                 }
             }
 
             NodeValue::Item(_) => {
                 drop(ast);
-                convert_children(child, doc, list_depth, style, alignments);
+                convert_children(child, doc, list_depth, style, alignments, page_breaks);
             }
 
             NodeValue::Table(_alignments) => {
@@ -438,7 +463,7 @@ fn convert_children<'a>(
 
             NodeValue::FrontMatter(_) | NodeValue::Document => {
                 drop(ast);
-                convert_children(child, doc, list_depth, style, alignments);
+                convert_children(child, doc, list_depth, style, alignments, page_breaks);
             }
 
             NodeValue::HtmlBlock(html) => {

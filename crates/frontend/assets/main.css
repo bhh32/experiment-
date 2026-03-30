@@ -172,8 +172,8 @@ body {
 .preview-content {
     flex: 1;
     overflow-y: auto;
-    padding: 20px;
-    background: #fff;
+    padding: 0;
+    background: #e0e0e0;
     line-height: 1.6;
 }
 

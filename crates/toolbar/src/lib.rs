@@ -63,6 +63,16 @@ pub mod formatting {
         (result, new_cursor)
     }
 
+    /// Insert a page break marker at cursor.
+    pub fn insert_page_break(content: &str, cursor: usize) -> (String, usize) {
+        let pb = "\n{pagebreak}\n";
+        let mut result = String::with_capacity(content.len() + pb.len());
+        result.push_str(&content[..cursor]);
+        result.push_str(pb);
+        result.push_str(&content[cursor..]);
+        (result, cursor + pb.len())
+    }
+
     /// Insert a horizontal rule at cursor.
     pub fn insert_hr(content: &str, cursor: usize) -> (String, usize) {
         let hr = "\n---\n";
