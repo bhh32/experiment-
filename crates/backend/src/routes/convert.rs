@@ -16,7 +16,7 @@ pub fn routes() -> Router<AppState> {
 async fn convert(Json(req): Json<ConvertRequest>) -> impl IntoResponse {
     match (req.from, req.to) {
         (FileFormat::Markdown, FileFormat::Docx) => {
-            let mut docx_style = conversion::DocxStyle::default();
+            let mut docx_style = conversion::DocStyle::default();
             if let Some(ref f) = req.font {
                 docx_style.body_font = f.clone();
             }

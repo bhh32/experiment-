@@ -3,56 +3,10 @@ use comrak::{Arena, Options, parse_document};
 use comrak::nodes::{NodeValue, ListType};
 use docx_rs::*;
 
-// Default measurement constants
-const CODE_FONT: &str = "Consolas";
+use shared::DocStyle;
 
-/// Document-level style settings for DOCX export.
-#[derive(Debug, Clone)]
-pub struct DocxStyle {
-    pub body_font: String,
-    pub body_size_pt: f32,
-    pub line_spacing: f32, // multiplier: 1.0 = single, 1.5, 2.0 = double
-}
-
-impl Default for DocxStyle {
-    fn default() -> Self {
-        Self {
-            body_font: "Calibri".into(),
-            body_size_pt: 11.0,
-            line_spacing: 1.15,
-        }
-    }
-}
-
-impl DocxStyle {
-    fn body_size_half_pts(&self) -> usize {
-        (self.body_size_pt * 2.0) as usize
-    }
-
-    fn heading1_size(&self) -> usize {
-        ((self.body_size_pt * 2.36) * 2.0) as usize // ~26pt for 11pt body
-    }
-
-    fn heading2_size(&self) -> usize {
-        ((self.body_size_pt * 1.82) * 2.0) as usize // ~20pt for 11pt body
-    }
-
-    fn heading3_size(&self) -> usize {
-        ((self.body_size_pt * 1.27) * 2.0) as usize // ~14pt for 11pt body
-    }
-
-    fn heading4_size(&self) -> usize {
-        self.body_size_half_pts() // same as body
-    }
-
-    fn code_size(&self) -> usize {
-        ((self.body_size_pt * 0.91) * 2.0) as usize // slightly smaller
-    }
-
-    fn line_spacing_twips(&self) -> i32 {
-        (self.line_spacing * 240.0) as i32 // 240 twips = single spacing
-    }
-}
+/// Type alias for backward compatibility
+pub type DocxStyle = DocStyle;
 
 fn gfm_options() -> Options<'static> {
     let mut opts = Options::default();
@@ -225,10 +179,10 @@ fn convert_children<'a>(
                 let level = heading.level;
                 let mut para = Paragraph::new();
                 let (heading_style, size) = match level {
-                    1 => ("Heading1", style.heading1_size()),
-                    2 => ("Heading2", style.heading2_size()),
-                    3 => ("Heading3", style.heading3_size()),
-                    _ => ("Heading4", style.heading4_size()),
+                    1 => ("Heading1", style.heading1_half_pts()),
+                    2 => ("Heading2", style.heading2_half_pts()),
+                    3 => ("Heading3", style.heading3_half_pts()),
+                    _ => ("Heading4", style.heading4_half_pts()),
                 };
                 para = para.style(heading_style);
 
@@ -351,8 +305,8 @@ fn convert_children<'a>(
                         .add_run(
                             Run::new()
                                 .add_text(line)
-                                .size(style.code_size())
-                                .fonts(font(CODE_FONT))
+                                .size(style.code_size_half_pts())
+                                .fonts(font(&style.code_font))
                                 .color("333333")
                         )
                         .indent(Some(360), None, Some(360), None)
@@ -576,8 +530,8 @@ fn walk_inline_nodes<'a>(
             NodeValue::Code(code) => {
                 let mut run = Run::new()
                     .add_text(code.literal.as_str())
-                    .fonts(font(CODE_FONT))
-                    .size(style.code_size())
+                    .fonts(font(&style.code_font))
+                    .size(style.code_size_half_pts())
                     .color("C7254E")
                     .highlight("lightGray");
                 if state.bold {
