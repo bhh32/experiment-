@@ -3,6 +3,7 @@ use dioxus::prelude::*;
 use crate::file_menu::FileMenu;
 use crate::toolbar_ui::ToolbarUi;
 use crate::preview_pane::PreviewPane;
+use crate::styles_sidebar::StylesSidebar;
 
 #[component]
 pub fn EditorView() -> Element {
@@ -13,6 +14,16 @@ pub fn EditorView() -> Element {
     let mut font_family = use_signal(|| "Calibri".to_string());
     let mut font_size = use_signal(|| 11.0f32);
     let mut line_height = use_signal(|| 1.15f32);
+
+    // Word and character counts
+    let word_count = use_memo(move || {
+        let text = content.read();
+        text.split_whitespace().count()
+    });
+
+    let char_count = use_memo(move || {
+        content.read().len()
+    });
 
     let on_content_change = move |evt: Event<FormData>| {
         content.set(evt.value().clone());
@@ -65,7 +76,6 @@ pub fn EditorView() -> Element {
             }
         }
 
-        // Tab inserts spaces
         if key == Key::Tab {
             evt.prevent_default();
             let val = content.read().clone();
@@ -81,6 +91,7 @@ pub fn EditorView() -> Element {
 
     rsx! {
         div { class: "app-container",
+            // Menu bar (File, Edit, View, etc.)
             FileMenu {
                 content: content,
                 file_path: file_path,
@@ -89,54 +100,83 @@ pub fn EditorView() -> Element {
                 font_size: font_size,
                 line_height: line_height,
             }
+
+            // Toolbar (font, size, formatting, alignment)
             ToolbarUi {
                 content: content,
                 font_family: font_family,
                 font_size: font_size,
                 line_height: line_height,
             }
-            div { class: "editor-layout",
-                div { class: "editor-pane",
-                    textarea {
-                        id: "editor-textarea",
-                        class: "editor-textarea",
-                        spellcheck: "true",
-                        placeholder: "Start writing markdown...",
-                        value: "{content}",
-                        oninput: on_content_change,
-                        onkeydown: on_keydown,
+
+            // Main layout: editor | preview | styles sidebar
+            div { class: "main-layout",
+                div { class: "editor-preview-area",
+                    // Markdown source editor
+                    div { class: "editor-pane",
+                        div { class: "editor-pane-header", "Source" }
+                        textarea {
+                            id: "editor-textarea",
+                            class: "editor-textarea",
+                            spellcheck: "true",
+                            placeholder: "Start writing markdown...",
+                            value: "{content}",
+                            oninput: on_content_change,
+                            onkeydown: on_keydown,
+                        }
+                    }
+
+                    // Document preview
+                    div { class: "preview-pane",
+                        div { class: "preview-pane-header",
+                            span { class: "preview-pane-label", "Preview" }
+                            div { class: "preview-mode-toggle",
+                                button {
+                                    class: if *preview_mode.read() == "markdown" { "mode-btn active" } else { "mode-btn" },
+                                    onclick: move |_| preview_mode.set("markdown".to_string()),
+                                    "Print"
+                                }
+                                button {
+                                    class: if *preview_mode.read() == "docx" { "mode-btn active" } else { "mode-btn" },
+                                    onclick: move |_| preview_mode.set("docx".to_string()),
+                                    "DOCX"
+                                }
+                                button {
+                                    class: if *preview_mode.read() == "odt" { "mode-btn active" } else { "mode-btn" },
+                                    onclick: move |_| preview_mode.set("odt".to_string()),
+                                    "ODF"
+                                }
+                            }
+                        }
+                        div { class: "preview-scroll-area",
+                            PreviewPane {
+                                content: content,
+                                mode: preview_mode,
+                                font_family: font_family,
+                                font_size: font_size,
+                                line_height: line_height,
+                            }
+                        }
                     }
                 }
-                div { class: "preview-pane",
-                    div { class: "preview-mode-toggle",
-                        button {
-                            class: if *preview_mode.read() == "markdown" { "mode-btn active" } else { "mode-btn" },
-                            onclick: move |_| preview_mode.set("markdown".to_string()),
-                            "Markdown"
-                        }
-                        button {
-                            class: if *preview_mode.read() == "docx" { "mode-btn active" } else { "mode-btn" },
-                            onclick: move |_| preview_mode.set("docx".to_string()),
-                            "DOCX"
-                        }
-                        button {
-                            class: if *preview_mode.read() == "odt" { "mode-btn active" } else { "mode-btn" },
-                            onclick: move |_| preview_mode.set("odt".to_string()),
-                            "ODF"
-                        }
-                    }
-                    PreviewPane {
-                        content: content,
-                        mode: preview_mode,
-                        font_family: font_family,
-                        font_size: font_size,
-                        line_height: line_height,
-                    }
+
+                // Styles sidebar
+                StylesSidebar {
+                    content: content,
                 }
             }
-            if !status_msg.read().is_empty() {
-                div { class: "status-bar",
-                    "{status_msg}"
+
+            // Status bar
+            div { class: "status-bar",
+                div { class: "status-left",
+                    span { "Words: {word_count}" }
+                    span { "Characters: {char_count}" }
+                    if !status_msg.read().is_empty() {
+                        span { class: "status-msg", "{status_msg}" }
+                    }
+                }
+                div { class: "status-right",
+                    span { "English (US)" }
                 }
             }
         }

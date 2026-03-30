@@ -13,110 +13,167 @@ pub fn FileMenu(
 ) -> Element {
     let mut show_open_dialog = use_signal(|| false);
     let mut files_list = use_signal(Vec::<FileEntry>::new);
+    let mut open_menu = use_signal(|| Option::<String>::None);
 
-    let open_clicked = move |_| {
-        spawn(async move {
-            match crate::api::list_files().await {
-                Ok(files) => {
-                    files_list.set(files);
-                    show_open_dialog.set(true);
-                }
-                Err(e) => status_msg.set(format!("Failed to list files: {e}")),
-            }
-        });
-    };
-
-    let save_clicked = move |_| {
-        let path = file_path.read().clone();
-        let text = content.read().clone();
-        spawn(async move {
-            let save_path = path.unwrap_or_else(|| "untitled.md".to_string());
-            match crate::api::save_file(&save_path, &text).await {
-                Ok(()) => {
-                    file_path.set(Some(save_path.clone()));
-                    status_msg.set(format!("Saved {save_path}"));
-                }
-                Err(e) => status_msg.set(format!("Save failed: {e}")),
-            }
-        });
-    };
-
-    let save_as_clicked = move |_| {
-        #[cfg(target_arch = "wasm32")]
-        {
-            let text = content.read().clone();
-            spawn(async move {
-                let window = web_sys::window().unwrap();
-                if let Some(name) = window.prompt_with_message("Save as:").ok().flatten() {
-                    if !name.is_empty() {
-                        let name = if !name.ends_with(".md") {
-                            format!("{name}.md")
-                        } else {
-                            name
-                        };
-                        match crate::api::save_file(&name, &text).await {
-                            Ok(()) => {
-                                file_path.set(Some(name.clone()));
-                                status_msg.set(format!("Saved as {name}"));
-                            }
-                            Err(e) => status_msg.set(format!("Save As failed: {e}")),
-                        }
-                    }
-                }
-            });
-        }
-    };
-
-    let export_docx = move |_| {
-        let text = content.read().clone();
-        let f = font_family.read().clone();
-        let fs = *font_size.read();
-        let lh = *line_height.read();
-        let fname = file_path
-            .read()
-            .as_ref()
-            .map(|p| p.replace(".md", ".docx"))
-            .unwrap_or_else(|| "document.docx".to_string());
-        spawn(async move {
-            match crate::api::convert(&text, "markdown", "docx", Some(&f), Some(fs), Some(lh)).await {
-                Ok(resp) => {
-                    download_base64(&resp.content, &fname, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
-                    status_msg.set(format!("Exported {fname}"));
-                }
-                Err(e) => status_msg.set(format!("Export DOCX failed: {e}")),
-            }
-        });
-    };
-
-    let export_odf = move |_| {
-        let text = content.read().clone();
-        let fname = file_path
-            .read()
-            .as_ref()
-            .map(|p| p.replace(".md", ".odt"))
-            .unwrap_or_else(|| "document.odt".to_string());
-        spawn(async move {
-            match crate::api::convert(&text, "markdown", "odt", None, None, None).await {
-                Ok(resp) => {
-                    download_base64(&resp.content, &fname, "application/vnd.oasis.opendocument.text");
-                    status_msg.set(format!("Exported {fname}"));
-                }
-                Err(e) => status_msg.set(format!("Export ODF failed: {e}")),
-            }
-        });
+    let close_menu = move |_: Event<MouseData>| {
+        open_menu.set(None);
     };
 
     rsx! {
-        div { class: "file-menu",
-            div { class: "file-menu-left",
-                button { class: "file-btn", onclick: open_clicked, "Open" }
-                button { class: "file-btn", id: "save-btn", onclick: save_clicked, "Save" }
-                button { class: "file-btn", id: "save-as-btn", onclick: save_as_clicked, "Save As" }
-                button { class: "file-btn", id: "export-docx-btn", onclick: export_docx, "Export DOCX" }
-                button { class: "file-btn", id: "export-odf-btn", onclick: export_odf, "Export ODF" }
+        div { class: "menu-bar",
+            div { class: "menu-bar-left",
+                // File menu
+                div { class: "dropdown-container",
+                    button {
+                        class: "menu-item",
+                        onclick: move |_| {
+                            let current = open_menu.read().clone();
+                            if current.as_deref() == Some("file") {
+                                open_menu.set(None);
+                            } else {
+                                open_menu.set(Some("file".to_string()));
+                            }
+                        },
+                        "File"
+                    }
+                    if open_menu.read().as_deref() == Some("file") {
+                        div { class: "dropdown-menu",
+                            button {
+                                class: "dropdown-item",
+                                onclick: move |_| {
+                                    open_menu.set(None);
+                                    spawn(async move {
+                                        match crate::api::list_files().await {
+                                            Ok(files) => {
+                                                files_list.set(files);
+                                                show_open_dialog.set(true);
+                                            }
+                                            Err(e) => status_msg.set(format!("Failed to list files: {e}")),
+                                        }
+                                    });
+                                },
+                                "Open"
+                                span { class: "dropdown-item-shortcut", "Ctrl+O" }
+                            }
+                            button {
+                                class: "dropdown-item",
+                                id: "save-btn",
+                                onclick: move |_| {
+                                    open_menu.set(None);
+                                    let path = file_path.read().clone();
+                                    let text = content.read().clone();
+                                    spawn(async move {
+                                        let save_path = path.unwrap_or_else(|| "untitled.md".to_string());
+                                        match crate::api::save_file(&save_path, &text).await {
+                                            Ok(()) => {
+                                                file_path.set(Some(save_path.clone()));
+                                                status_msg.set(format!("Saved {save_path}"));
+                                            }
+                                            Err(e) => status_msg.set(format!("Save failed: {e}")),
+                                        }
+                                    });
+                                },
+                                "Save"
+                                span { class: "dropdown-item-shortcut", "Ctrl+S" }
+                            }
+                            button {
+                                class: "dropdown-item",
+                                id: "save-as-btn",
+                                onclick: move |_| {
+                                    open_menu.set(None);
+                                    #[cfg(target_arch = "wasm32")]
+                                    {
+                                        let text = content.read().clone();
+                                        spawn(async move {
+                                            let window = web_sys::window().unwrap();
+                                            if let Some(name) = window.prompt_with_message("Save as:").ok().flatten() {
+                                                if !name.is_empty() {
+                                                    let name = if !name.ends_with(".md") {
+                                                        format!("{name}.md")
+                                                    } else {
+                                                        name
+                                                    };
+                                                    match crate::api::save_file(&name, &text).await {
+                                                        Ok(()) => {
+                                                            file_path.set(Some(name.clone()));
+                                                            status_msg.set(format!("Saved as {name}"));
+                                                        }
+                                                        Err(e) => status_msg.set(format!("Save As failed: {e}")),
+                                                    }
+                                                }
+                                            }
+                                        });
+                                    }
+                                },
+                                "Save As..."
+                            }
+                            div { class: "dropdown-divider" }
+                            button {
+                                class: "dropdown-item",
+                                id: "export-docx-btn",
+                                onclick: move |_| {
+                                    open_menu.set(None);
+                                    let text = content.read().clone();
+                                    let f = font_family.read().clone();
+                                    let fs = *font_size.read();
+                                    let lh = *line_height.read();
+                                    let fname = file_path
+                                        .read()
+                                        .as_ref()
+                                        .map(|p| p.replace(".md", ".docx"))
+                                        .unwrap_or_else(|| "document.docx".to_string());
+                                    spawn(async move {
+                                        match crate::api::convert(&text, "markdown", "docx", Some(&f), Some(fs), Some(lh)).await {
+                                            Ok(resp) => {
+                                                download_base64(&resp.content, &fname, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+                                                status_msg.set(format!("Exported {fname}"));
+                                            }
+                                            Err(e) => status_msg.set(format!("Export DOCX failed: {e}")),
+                                        }
+                                    });
+                                },
+                                "Export as DOCX"
+                            }
+                            button {
+                                class: "dropdown-item",
+                                id: "export-odf-btn",
+                                onclick: move |_| {
+                                    open_menu.set(None);
+                                    let text = content.read().clone();
+                                    let fname = file_path
+                                        .read()
+                                        .as_ref()
+                                        .map(|p| p.replace(".md", ".odt"))
+                                        .unwrap_or_else(|| "document.odt".to_string());
+                                    spawn(async move {
+                                        match crate::api::convert(&text, "markdown", "odt", None, None, None).await {
+                                            Ok(resp) => {
+                                                download_base64(&resp.content, &fname, "application/vnd.oasis.opendocument.text");
+                                                status_msg.set(format!("Exported {fname}"));
+                                            }
+                                            Err(e) => status_msg.set(format!("Export ODF failed: {e}")),
+                                        }
+                                    });
+                                },
+                                "Export as ODF"
+                            }
+                        }
+                    }
+                }
+
+                // Edit menu
+                button { class: "menu-item", onclick: close_menu, "Edit" }
+                button { class: "menu-item", onclick: close_menu, "View" }
+                button { class: "menu-item", onclick: close_menu, "Insert" }
+                button { class: "menu-item", onclick: close_menu, "Format" }
+                button { class: "menu-item", onclick: close_menu, "Styles" }
+                button { class: "menu-item", onclick: close_menu, "Table" }
+                button { class: "menu-item", onclick: close_menu, "Tools" }
+                button { class: "menu-item", onclick: close_menu, "Help" }
             }
-            div { class: "file-menu-right",
-                span { class: "file-name",
+
+            div { class: "menu-bar-right",
+                span { class: "file-name-display",
                     {
                         let name = file_path.read().clone().unwrap_or_else(|| "untitled.md".to_string());
                         name
@@ -125,6 +182,7 @@ pub fn FileMenu(
             }
         }
 
+        // Open File dialog
         if *show_open_dialog.read() {
             div { class: "dialog-overlay", onclick: move |_| show_open_dialog.set(false),
                 div { class: "dialog", onclick: move |evt| evt.stop_propagation(),
@@ -174,7 +232,6 @@ fn download_base64(_data: &str, _filename: &str, _mime: &str) {
         use wasm_bindgen::JsCast;
         use web_sys::{Blob, BlobPropertyBag, Url};
 
-        // Decode base64 to bytes
         let decoded = base64_decode(_data);
         let uint8arr = Uint8Array::new_with_length(decoded.len() as u32);
         uint8arr.copy_from(&decoded);

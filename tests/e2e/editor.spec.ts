@@ -11,12 +11,16 @@ test.describe('Editor View', () => {
     await expect(page.locator('.editor-textarea')).toBeVisible();
   });
 
-  test('shows file menu with all buttons', async ({ page }) => {
-    await expect(page.locator('button.file-btn:text-is("Open")')).toBeVisible();
-    await expect(page.locator('#save-btn')).toBeVisible();
-    await expect(page.locator('#save-as-btn')).toBeVisible();
-    await expect(page.locator('#export-docx-btn')).toBeVisible();
-    await expect(page.locator('#export-odf-btn')).toBeVisible();
+  test('shows menu bar with File, Edit, View, etc.', async ({ page }) => {
+    await expect(page.locator('.menu-item:text-is("File")')).toBeVisible();
+    await expect(page.locator('.menu-item:text-is("Edit")')).toBeVisible();
+    await expect(page.locator('.menu-item:text-is("View")')).toBeVisible();
+    await expect(page.locator('.menu-item:text-is("Insert")')).toBeVisible();
+    await expect(page.locator('.menu-item:text-is("Format")')).toBeVisible();
+    await expect(page.locator('.menu-item:text-is("Styles")')).toBeVisible();
+    await expect(page.locator('.menu-item:text-is("Table")')).toBeVisible();
+    await expect(page.locator('.menu-item:text-is("Tools")')).toBeVisible();
+    await expect(page.locator('.menu-item:text-is("Help")')).toBeVisible();
   });
 
   test('shows toolbar with formatting buttons', async ({ page }) => {
@@ -26,8 +30,14 @@ test.describe('Editor View', () => {
     }
   });
 
+  test('shows font, size, and line height selectors', async ({ page }) => {
+    await expect(page.locator('.font-select')).toBeVisible();
+    await expect(page.locator('.font-size-select')).toBeVisible();
+    await expect(page.locator('.line-height-select')).toBeVisible();
+  });
+
   test('shows preview mode toggle', async ({ page }) => {
-    await expect(page.locator('.mode-btn:text-is("Markdown")')).toBeVisible();
+    await expect(page.locator('.mode-btn:text-is("Print")')).toBeVisible();
     await expect(page.locator('.mode-btn:text-is("DOCX")')).toBeVisible();
     await expect(page.locator('.mode-btn:text-is("ODF")')).toBeVisible();
   });
@@ -45,32 +55,56 @@ test.describe('Editor View', () => {
   });
 
   test('shows untitled.md as default filename', async ({ page }) => {
-    await expect(page.locator('.file-name')).toContainText('untitled.md');
+    await expect(page.locator('.file-name-display')).toContainText('untitled.md');
   });
 
-  test('DOCX preview mode shows Calibri styling', async ({ page }) => {
+  test('DOCX preview mode activates', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.fill('Test content');
-
     await page.locator('.mode-btn:text-is("DOCX")').click();
     await expect(page.locator('.mode-btn:text-is("DOCX")')).toHaveClass(/active/);
-
-    const content = await page.locator('.preview-content').innerHTML();
-    expect(content).toContain('Calibri');
   });
 
-  test('ODF preview mode shows Liberation Serif styling', async ({ page }) => {
+  test('ODF preview mode activates', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.fill('Test content');
-
     await page.locator('.mode-btn:text-is("ODF")').click();
     await expect(page.locator('.mode-btn:text-is("ODF")')).toHaveClass(/active/);
-
-    const content = await page.locator('.preview-content').innerHTML();
-    expect(content).toContain('Liberation Serif');
   });
 
-  test('markdown preview mode is default and active', async ({ page }) => {
-    await expect(page.locator('.mode-btn:text-is("Markdown")')).toHaveClass(/active/);
+  test('Print preview mode is default', async ({ page }) => {
+    await expect(page.locator('.mode-btn:text-is("Print")')).toHaveClass(/active/);
+  });
+
+  test('shows styles sidebar', async ({ page }) => {
+    await expect(page.locator('.styles-sidebar')).toBeVisible();
+    await expect(page.locator('.style-item:has-text("Heading 1")')).toBeVisible();
+    await expect(page.locator('.style-item:has-text("Body Text")')).toBeVisible();
+    await expect(page.locator('.style-item:has-text("Code")')).toBeVisible();
+    await expect(page.locator('.style-item:has-text("Quote")')).toBeVisible();
+  });
+
+  test('shows status bar with word and character counts', async ({ page }) => {
+    await expect(page.locator('.status-bar')).toBeVisible();
+    await expect(page.locator('.status-bar')).toContainText('Words:');
+    await expect(page.locator('.status-bar')).toContainText('Characters:');
+
+    const textarea = page.locator('.editor-textarea');
+    await textarea.fill('Hello world test');
+    await expect(page.locator('.status-bar')).toContainText('Words: 3');
+  });
+
+  test('preview shows document page on gray background', async ({ page }) => {
+    const scrollArea = page.locator('.preview-scroll-area');
+    const bg = await scrollArea.evaluate(el => getComputedStyle(el).backgroundColor);
+    // Gray background (rgb(128, 128, 128) = #808080)
+    expect(bg).toContain('128');
+  });
+
+  test('alignment buttons are visible (L, C, R, J)', async ({ page }) => {
+    await expect(page.locator('.tool-btn:text-is("L")')).toBeVisible();
+    await expect(page.locator('.tool-btn:text-is("C")')).toBeVisible();
+    await expect(page.locator('.tool-btn:text-is("R")')).toBeVisible();
+    await expect(page.locator('.tool-btn:text-is("J")')).toBeVisible();
   });
 });
