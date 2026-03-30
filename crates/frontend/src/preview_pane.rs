@@ -268,15 +268,20 @@ fn render_odt_preview(html: &str, ds: &DocStyle) -> String {
     )
 }
 
-/// Plain markdown preview
+/// Plain markdown preview — also splits at page breaks for consistency.
 fn render_md_preview(html: &str, ds: &DocStyle) -> String {
     let f = &ds.body_font;
     let body = ds.body_size_pt;
     let lh = ds.line_spacing;
 
     format!(
-        r##"<div class="md-preview" style="font-family: '{f}', sans-serif; font-size: {body}pt; line-height: {lh}; padding: 20px;">
-{html}</div>"##
+        r##"<div class="md-preview" style="font-family: '{f}', sans-serif; font-size: {body}pt; line-height: {lh};">
+<style>
+.md-preview {{ display: flex; flex-direction: column; align-items: center; gap: 20px; padding: 20px 0; }}
+.md-page {{ width: 8.5in; min-height: 11in; padding: 1in; background: white; box-shadow: 0 2px 8px rgba(0,0,0,0.15); }}
+</style>
+{pages}</div>"##,
+        pages = split_into_pages(html, "md-page")
     )
 }
 

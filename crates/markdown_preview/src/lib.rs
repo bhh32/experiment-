@@ -8,6 +8,7 @@ fn gfm_options() -> Options<'static> {
     opts.extension.tasklist = true;
     opts.extension.footnotes = true;
     opts.render.unsafe_ = false;
+    opts.render.hardbreaks = true;
     opts
 }
 

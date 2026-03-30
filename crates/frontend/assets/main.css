@@ -243,15 +243,7 @@ body {
 }
 
 .preview-content {
-    background: #fff;
-    max-width: 8.5in;
-    min-height: 11in;
-    margin: 0 auto;
-    padding: 1in;
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
     line-height: 1.6;
-    font-family: "Calibri", sans-serif;
-    font-size: 11pt;
 }
 
 .preview-content h1 { font-size: 26pt; font-weight: bold; margin: 12pt 0 6pt 0; line-height: 1.15; color: #000; }
@@ -535,9 +527,11 @@ body {
 
 /* ─── Page Break ─── */
 .page-break {
-    border-top: 2px dashed #ccc;
-    margin: 24px 0;
-    position: relative;
+    break-after: always;
+    height: 0;
+    margin: 0;
+    padding: 0;
+    border: none;
 }
 
 /* ─── Print ─── */

@@ -8,6 +8,7 @@ fn gfm_options() -> Options<'static> {
     opts.extension.tasklist = true;
     opts.extension.footnotes = true;
     opts.render.unsafe_ = false; // prevent raw HTML (XSS protection)
+    opts.render.hardbreaks = true; // single newline = line break (word processor behavior)
     opts
 }
 
