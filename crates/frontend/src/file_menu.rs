@@ -8,6 +8,7 @@ pub fn FileMenu(
     file_path: Signal<Option<String>>,
     status_msg: Signal<String>,
     font_family: Signal<String>,
+    font_size: Signal<f32>,
     line_height: Signal<f32>,
 ) -> Element {
     let mut show_open_dialog = use_signal(|| false);
@@ -69,6 +70,7 @@ pub fn FileMenu(
     let export_docx = move |_| {
         let text = content.read().clone();
         let f = font_family.read().clone();
+        let fs = *font_size.read();
         let lh = *line_height.read();
         let fname = file_path
             .read()
@@ -76,7 +78,7 @@ pub fn FileMenu(
             .map(|p| p.replace(".md", ".docx"))
             .unwrap_or_else(|| "document.docx".to_string());
         spawn(async move {
-            match crate::api::convert(&text, "markdown", "docx", Some(&f), Some(lh)).await {
+            match crate::api::convert(&text, "markdown", "docx", Some(&f), Some(fs), Some(lh)).await {
                 Ok(resp) => {
                     download_base64(&resp.content, &fname, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
                     status_msg.set(format!("Exported {fname}"));
@@ -94,7 +96,7 @@ pub fn FileMenu(
             .map(|p| p.replace(".md", ".odt"))
             .unwrap_or_else(|| "document.odt".to_string());
         spawn(async move {
-            match crate::api::convert(&text, "markdown", "odt", None, None).await {
+            match crate::api::convert(&text, "markdown", "odt", None, None, None).await {
                 Ok(resp) => {
                     download_base64(&resp.content, &fname, "application/vnd.oasis.opendocument.text");
                     status_msg.set(format!("Exported {fname}"));

@@ -11,6 +11,7 @@ pub fn EditorView() -> Element {
     let mut status_msg = use_signal(|| String::new());
     let mut preview_mode = use_signal(|| "markdown".to_string());
     let mut font_family = use_signal(|| "Calibri".to_string());
+    let mut font_size = use_signal(|| 11.0f32);
     let mut line_height = use_signal(|| 1.15f32);
 
     let on_content_change = move |evt: Event<FormData>| {
@@ -85,11 +86,13 @@ pub fn EditorView() -> Element {
                 file_path: file_path,
                 status_msg: status_msg,
                 font_family: font_family,
+                font_size: font_size,
                 line_height: line_height,
             }
             ToolbarUi {
                 content: content,
                 font_family: font_family,
+                font_size: font_size,
                 line_height: line_height,
             }
             div { class: "editor-layout",
@@ -126,6 +129,7 @@ pub fn EditorView() -> Element {
                         content: content,
                         mode: preview_mode,
                         font_family: font_family,
+                        font_size: font_size,
                         line_height: line_height,
                     }
                 }

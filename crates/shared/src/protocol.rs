@@ -18,6 +18,8 @@ pub struct ConvertRequest {
     #[serde(default)]
     pub font: Option<String>,
     #[serde(default)]
+    pub font_size: Option<f32>,
+    #[serde(default)]
     pub line_height: Option<f32>,
 }
 

@@ -6,15 +6,18 @@ pub fn PreviewPane(
     content: Signal<String>,
     mode: Signal<String>,
     font_family: Signal<String>,
+    font_size: Signal<f32>,
     line_height: Signal<f32>,
 ) -> Element {
     let html = use_memo(move || {
         let text = content.read().clone();
         let m = mode.read().clone();
         let ff = font_family.read().clone();
+        let fs = *font_size.read();
         let lh = *line_height.read();
 
-        let ds = DocStyle::new(&ff, lh);
+        let mut ds = DocStyle::new(&ff, lh);
+        ds.body_size_pt = fs;
         let (clean_md, alignments) = preprocess_alignments(&text);
         let mut base_html = markdown_preview::render_preview(&clean_md);
         base_html = apply_alignments(&base_html, &alignments);

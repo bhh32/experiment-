@@ -45,13 +45,14 @@ pub async fn delete_file(path: &str) -> Result<(), String> {
     Ok(())
 }
 
-pub async fn convert(content: &str, from: &str, to: &str, font: Option<&str>, line_height: Option<f32>) -> Result<ConvertResponse, String> {
+pub async fn convert(content: &str, from: &str, to: &str, font: Option<&str>, font_size: Option<f32>, line_height: Option<f32>) -> Result<ConvertResponse, String> {
     let resp = Request::post(&format!("{BASE}/convert"))
         .json(&serde_json::json!({
             "content": content,
             "from": from,
             "to": to,
             "font": font,
+            "font_size": font_size,
             "line_height": line_height,
         }))
         .map_err(|e| e.to_string())?

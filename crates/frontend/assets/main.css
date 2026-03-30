@@ -76,6 +76,10 @@ body {
     min-width: 140px;
 }
 
+.font-size-select {
+    min-width: 55px;
+}
+
 .line-height-select {
     min-width: 70px;
 }

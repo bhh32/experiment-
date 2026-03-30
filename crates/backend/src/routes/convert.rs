@@ -20,6 +20,9 @@ async fn convert(Json(req): Json<ConvertRequest>) -> impl IntoResponse {
             if let Some(ref f) = req.font {
                 docx_style.body_font = f.clone();
             }
+            if let Some(fs) = req.font_size {
+                docx_style.body_size_pt = fs;
+            }
             if let Some(lh) = req.line_height {
                 docx_style.line_spacing = lh;
             }

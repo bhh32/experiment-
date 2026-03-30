@@ -50,6 +50,10 @@ pub const FONT_OPTIONS: &[&str] = &[
     "Liberation Sans",
 ];
 
+pub const FONT_SIZE_OPTIONS: &[&str] = &[
+    "8", "9", "10", "10.5", "11", "12", "14", "16", "18", "20", "24", "28", "36", "48", "72",
+];
+
 pub const LINE_HEIGHT_OPTIONS: &[(&str, &str)] = &[
     ("1.0", "Single"),
     ("1.15", "1.15"),
@@ -63,6 +67,7 @@ pub const LINE_HEIGHT_OPTIONS: &[(&str, &str)] = &[
 pub fn ToolbarUi(
     content: Signal<String>,
     font_family: Signal<String>,
+    font_size: Signal<f32>,
     line_height: Signal<f32>,
 ) -> Element {
     rsx! {
@@ -75,6 +80,21 @@ pub fn ToolbarUi(
                 onchange: move |evt| font_family.set(evt.value().clone()),
                 for &f in FONT_OPTIONS {
                     option { value: f, "{f}" }
+                }
+            }
+
+            // Font size selector
+            select {
+                class: "tool-select font-size-select",
+                title: "Font Size",
+                value: "{font_size}",
+                onchange: move |evt| {
+                    if let Ok(v) = evt.value().parse::<f32>() {
+                        font_size.set(v);
+                    }
+                },
+                for &s in FONT_SIZE_OPTIONS {
+                    option { value: s, "{s}" }
                 }
             }
 
