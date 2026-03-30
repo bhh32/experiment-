@@ -28,7 +28,13 @@ pub fn PreviewPane(
 }
 
 fn render_styled_preview(markdown: &str, font_family: &str, line_height: f32, mode: &str) -> String {
-    let base_html = markdown_preview::render_preview(markdown);
+    // Pre-process alignment prefixes: strip them from markdown, track which
+    // paragraphs need alignment, then post-process the HTML
+    let (clean_md, alignments) = preprocess_alignments(markdown);
+    let mut base_html = markdown_preview::render_preview(&clean_md);
+
+    // Apply alignment to paragraphs in the HTML
+    base_html = apply_alignments(&base_html, &alignments);
 
     let (body_font, heading_font, code_font, body_size, container_class) = match mode {
         "docx" => (
@@ -80,4 +86,68 @@ fn render_styled_preview(markdown: &str, font_family: &str, line_height: f32, mo
 </style>
 {base_html}</div>"#
     )
+}
+
+/// Strip alignment prefixes from markdown lines and collect which
+/// paragraph indices need alignment. Returns (cleaned markdown, Vec<alignment>)
+/// where alignments[i] is the alignment for the i-th paragraph.
+fn preprocess_alignments(markdown: &str) -> (String, Vec<String>) {
+    let mut clean_lines = Vec::new();
+    let mut alignments = Vec::new();
+    let mut current_align = "left".to_string();
+
+    for line in markdown.lines() {
+        let (align, text) = toolbar::formatting::parse_alignment(line);
+        if align != "left" {
+            current_align = align.to_string();
+        }
+        // Track alignment for each non-empty line that starts a paragraph
+        if !text.trim().is_empty() && (clean_lines.is_empty() || clean_lines.last() == Some(&String::new())) {
+            alignments.push(current_align.clone());
+            if align == "left" {
+                // Don't reset; keep default
+            }
+        }
+        if text.trim().is_empty() {
+            current_align = "left".to_string();
+        }
+        clean_lines.push(text.to_string());
+    }
+
+    (clean_lines.join("\n"), alignments)
+}
+
+/// Post-process HTML to wrap paragraphs/headings with alignment styles.
+fn apply_alignments(html: &str, alignments: &[String]) -> String {
+    let block_tags = ["<p>", "<h1>", "<h2>", "<h3>", "<h4>", "<h5>", "<h6>"];
+    let mut result = String::with_capacity(html.len() + alignments.len() * 30);
+    let mut para_idx = 0;
+
+    for line in html.lines() {
+        let trimmed = line.trim();
+        let is_block = block_tags.iter().any(|tag| trimmed.starts_with(tag));
+
+        if is_block {
+            if let Some(align) = alignments.get(para_idx) {
+                if align != "left" {
+                    // Insert style attribute into the opening tag
+                    if let Some(close_bracket) = trimmed.find('>') {
+                        let tag = &trimmed[..close_bracket];
+                        let rest = &trimmed[close_bracket..];
+                        result.push_str(tag);
+                        result.push_str(&format!(r#" style="text-align:{align}""#));
+                        result.push_str(rest);
+                        result.push('\n');
+                        para_idx += 1;
+                        continue;
+                    }
+                }
+            }
+            para_idx += 1;
+        }
+        result.push_str(line);
+        result.push('\n');
+    }
+
+    result
 }

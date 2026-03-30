@@ -84,10 +84,44 @@ pub fn markdown_to_docx(markdown: &str) -> Result<Vec<u8>, ConversionError> {
     markdown_to_docx_styled(markdown, &DocxStyle::default())
 }
 
+/// Pre-process markdown to extract alignment prefixes.
+/// Returns (cleaned markdown, map of paragraph text -> alignment).
+fn preprocess_alignments(markdown: &str) -> (String, std::collections::HashMap<String, AlignmentType>) {
+    let mut clean_lines = Vec::new();
+    let mut alignments = std::collections::HashMap::new();
+
+    for line in markdown.lines() {
+        if let Some(rest) = line.strip_prefix("{center}") {
+            let key = rest.trim().to_string();
+            if !key.is_empty() {
+                alignments.insert(key, AlignmentType::Center);
+            }
+            clean_lines.push(rest.to_string());
+        } else if let Some(rest) = line.strip_prefix("{right}") {
+            let key = rest.trim().to_string();
+            if !key.is_empty() {
+                alignments.insert(key, AlignmentType::Right);
+            }
+            clean_lines.push(rest.to_string());
+        } else if let Some(rest) = line.strip_prefix("{justify}") {
+            let key = rest.trim().to_string();
+            if !key.is_empty() {
+                alignments.insert(key, AlignmentType::Justified);
+            }
+            clean_lines.push(rest.to_string());
+        } else {
+            clean_lines.push(line.to_string());
+        }
+    }
+
+    (clean_lines.join("\n"), alignments)
+}
+
 /// Convert markdown to a fully-formatted DOCX byte buffer with custom styling.
 pub fn markdown_to_docx_styled(markdown: &str, style: &DocxStyle) -> Result<Vec<u8>, ConversionError> {
+    let (clean_md, alignments) = preprocess_alignments(markdown);
     let arena = Arena::new();
-    let root = parse_document(&arena, markdown, &gfm_options());
+    let root = parse_document(&arena, &clean_md, &gfm_options());
 
     let mut doc = Docx::new();
 
@@ -166,7 +200,7 @@ pub fn markdown_to_docx_styled(markdown: &str, style: &DocxStyle) -> Result<Vec<
         .add_numbering(Numbering::new(2, 2));
 
     // Walk the AST and build the document
-    convert_children(root, &mut doc, 0, style);
+    convert_children(root, &mut doc, 0, style, &alignments);
 
     let mut buf = Vec::new();
     doc.build()
@@ -182,6 +216,7 @@ fn convert_children<'a>(
     doc: &mut Docx,
     list_depth: usize,
     style: &DocxStyle,
+    alignments: &std::collections::HashMap<String, AlignmentType>,
 ) {
     for child in node.children() {
         let ast = child.data.borrow();
@@ -207,7 +242,12 @@ fn convert_children<'a>(
                     para = para.add_run(run);
                 }
 
-                // Add spacing after heading
+                // Check alignment
+                let first_text = get_first_text(child);
+                if let Some(align) = alignments.get(first_text.trim()) {
+                    para = para.align(*align);
+                }
+
                 para = para.line_spacing(
                     LineSpacing::new()
                         .before(240)
@@ -253,6 +293,12 @@ fn convert_children<'a>(
                     }
                 }
 
+                // Check first text node for alignment match
+                let first_text = get_first_text(child);
+                if let Some(align) = alignments.get(first_text.trim()) {
+                    para = para.align(*align);
+                }
+
                 for mut run in runs {
                     run = run.size(style.body_size_half_pts()).fonts(font(&style.body_font));
                     para = para.add_run(run);
@@ -290,7 +336,7 @@ fn convert_children<'a>(
                         *doc = std::mem::take(doc).add_paragraph(para);
                     } else {
                         drop(bq_ast);
-                        convert_children(bq_child, doc, list_depth, style);
+                        convert_children(bq_child, doc, list_depth, style, alignments);
                     }
                 }
             }
@@ -331,13 +377,13 @@ fn convert_children<'a>(
                 drop(ast);
                 let new_depth = list_depth + if list_depth > 0 { 1 } else { 0 };
                 for item_child in child.children() {
-                    convert_children(item_child, doc, new_depth, style);
+                    convert_children(item_child, doc, new_depth, style, alignments);
                 }
             }
 
             NodeValue::Item(_) => {
                 drop(ast);
-                convert_children(child, doc, list_depth, style);
+                convert_children(child, doc, list_depth, style, alignments);
             }
 
             NodeValue::Table(_alignments) => {
@@ -438,7 +484,7 @@ fn convert_children<'a>(
 
             NodeValue::FrontMatter(_) | NodeValue::Document => {
                 drop(ast);
-                convert_children(child, doc, list_depth, style);
+                convert_children(child, doc, list_depth, style, alignments);
             }
 
             NodeValue::HtmlBlock(html) => {
@@ -613,6 +659,22 @@ fn apply_inline_state(mut run: Run, state: &InlineState) -> Run {
         run = run.color("0563C1").underline("single");
     }
     run
+}
+
+/// Get the first text content from a node's children (for alignment lookup).
+fn get_first_text<'a>(node: &'a comrak::nodes::AstNode<'a>) -> String {
+    for child in node.children() {
+        let ast = child.data.borrow();
+        if let NodeValue::Text(text) = &ast.value {
+            return text.clone();
+        }
+        drop(ast);
+        let result = get_first_text(child);
+        if !result.is_empty() {
+            return result;
+        }
+    }
+    String::new()
 }
 
 fn strip_html_tags(html: &str) -> String {

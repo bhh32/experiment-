@@ -82,6 +82,69 @@ pub mod formatting {
         (result, cursor + marker.len())
     }
 
+    /// Alignment prefixes recognized by the preview and export pipeline.
+    const ALIGN_PREFIXES: &[&str] = &["{center}", "{right}", "{justify}"];
+
+    /// Toggle alignment on the current line. If the line already has this
+    /// alignment, remove it. If it has a different alignment, replace it.
+    pub fn toggle_alignment(content: &str, cursor: usize, alignment: &str) -> (String, usize) {
+        let line_start = content[..cursor]
+            .rfind('\n')
+            .map(|p| p + 1)
+            .unwrap_or(0);
+
+        let line_end = content[line_start..]
+            .find('\n')
+            .map(|p| line_start + p)
+            .unwrap_or(content.len());
+
+        let line = &content[line_start..line_end];
+        let prefix = format!("{{{alignment}}}");
+
+        // Check if line already has this alignment
+        if line.starts_with(&prefix) {
+            // Remove it (toggle off)
+            let stripped = &line[prefix.len()..];
+            let mut result = String::with_capacity(content.len());
+            result.push_str(&content[..line_start]);
+            result.push_str(stripped);
+            result.push_str(&content[line_end..]);
+            let new_cursor = cursor.saturating_sub(prefix.len());
+            return (result, new_cursor.max(line_start));
+        }
+
+        // Remove any existing alignment prefix
+        let mut clean_line = line;
+        let mut removed_len = 0;
+        for &ap in ALIGN_PREFIXES {
+            if line.starts_with(ap) {
+                clean_line = &line[ap.len()..];
+                removed_len = ap.len();
+                break;
+            }
+        }
+
+        // Add the new prefix
+        let mut result = String::with_capacity(content.len() + prefix.len());
+        result.push_str(&content[..line_start]);
+        result.push_str(&prefix);
+        result.push_str(clean_line);
+        result.push_str(&content[line_end..]);
+        let new_cursor = cursor - removed_len + prefix.len();
+        (result, new_cursor)
+    }
+
+    /// Strip alignment prefix from a line, returning (alignment, clean_text).
+    pub fn parse_alignment(line: &str) -> (&str, &str) {
+        for &prefix in ALIGN_PREFIXES {
+            if line.starts_with(prefix) {
+                let align = &prefix[1..prefix.len() - 1]; // strip { }
+                return (align, &line[prefix.len()..]);
+            }
+        }
+        ("left", line)
+    }
+
     fn insert_line_prefix(content: &str, cursor: usize, prefix: &str) -> (String, usize) {
         // Find start of current line
         let line_start = content[..cursor]
@@ -171,5 +234,49 @@ mod tests {
         let (text, _) = insert_hr("above", 5);
         assert!(text.contains("---"));
         assert!(text.starts_with("above"));
+    }
+
+    #[test]
+    fn center_adds_prefix() {
+        let (text, _) = toggle_alignment("hello", 0, "center");
+        assert_eq!(text, "{center}hello");
+    }
+
+    #[test]
+    fn center_toggles_off() {
+        let (text, _) = toggle_alignment("{center}hello", 8, "center");
+        assert_eq!(text, "hello");
+    }
+
+    #[test]
+    fn center_replaces_right() {
+        let (text, _) = toggle_alignment("{right}hello", 7, "center");
+        assert_eq!(text, "{center}hello");
+    }
+
+    #[test]
+    fn right_alignment() {
+        let (text, _) = toggle_alignment("hello", 0, "right");
+        assert_eq!(text, "{right}hello");
+    }
+
+    #[test]
+    fn parse_center() {
+        let (align, text) = parse_alignment("{center}hello world");
+        assert_eq!(align, "center");
+        assert_eq!(text, "hello world");
+    }
+
+    #[test]
+    fn parse_no_alignment() {
+        let (align, text) = parse_alignment("hello world");
+        assert_eq!(align, "left");
+        assert_eq!(text, "hello world");
+    }
+
+    #[test]
+    fn justify_alignment() {
+        let (text, _) = toggle_alignment("hello", 0, "justify");
+        assert_eq!(text, "{justify}hello");
     }
 }
