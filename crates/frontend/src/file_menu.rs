@@ -7,6 +7,8 @@ pub fn FileMenu(
     content: Signal<String>,
     file_path: Signal<Option<String>>,
     status_msg: Signal<String>,
+    font_family: Signal<String>,
+    line_height: Signal<f32>,
 ) -> Element {
     let mut show_open_dialog = use_signal(|| false);
     let mut files_list = use_signal(Vec::<FileEntry>::new);
@@ -66,13 +68,15 @@ pub fn FileMenu(
 
     let export_docx = move |_| {
         let text = content.read().clone();
+        let f = font_family.read().clone();
+        let lh = *line_height.read();
         let fname = file_path
             .read()
             .as_ref()
             .map(|p| p.replace(".md", ".docx"))
             .unwrap_or_else(|| "document.docx".to_string());
         spawn(async move {
-            match crate::api::convert(&text, "markdown", "docx").await {
+            match crate::api::convert(&text, "markdown", "docx", Some(&f), Some(lh)).await {
                 Ok(resp) => {
                     download_base64(&resp.content, &fname, "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
                     status_msg.set(format!("Exported {fname}"));
@@ -90,7 +94,7 @@ pub fn FileMenu(
             .map(|p| p.replace(".md", ".odt"))
             .unwrap_or_else(|| "document.odt".to_string());
         spawn(async move {
-            match crate::api::convert(&text, "markdown", "odt").await {
+            match crate::api::convert(&text, "markdown", "odt", None, None).await {
                 Ok(resp) => {
                     download_base64(&resp.content, &fname, "application/vnd.oasis.opendocument.text");
                     status_msg.set(format!("Exported {fname}"));

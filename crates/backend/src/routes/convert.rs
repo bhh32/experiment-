@@ -16,7 +16,14 @@ pub fn routes() -> Router<AppState> {
 async fn convert(Json(req): Json<ConvertRequest>) -> impl IntoResponse {
     match (req.from, req.to) {
         (FileFormat::Markdown, FileFormat::Docx) => {
-            match conversion::markdown_to_docx(&req.content) {
+            let mut docx_style = conversion::DocxStyle::default();
+            if let Some(ref f) = req.font {
+                docx_style.body_font = f.clone();
+            }
+            if let Some(lh) = req.line_height {
+                docx_style.line_spacing = lh;
+            }
+            match conversion::markdown_to_docx_styled(&req.content, &docx_style) {
                 Ok(bytes) => {
                     let encoded = base64_encode(&bytes);
                     let resp = ConvertResponse {

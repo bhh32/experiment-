@@ -3,7 +3,7 @@ mod docx;
 mod pandoc;
 
 pub use markdown::{markdown_to_html, markdown_to_plain_text};
-pub use docx::{markdown_to_docx, docx_to_markdown};
+pub use docx::{markdown_to_docx, markdown_to_docx_styled, docx_to_markdown, DocxStyle};
 pub use pandoc::{markdown_to_odt, odt_to_markdown};
 
 use thiserror::Error;

@@ -3,22 +3,56 @@ use comrak::{Arena, Options, parse_document};
 use comrak::nodes::{NodeValue, ListType};
 use docx_rs::*;
 
-// Measurement constants (twips: 1 inch = 1440 twips, 1pt = 20 twips)
-const INCH: i32 = 1440;
-const PT: usize = 20;
-const MARGIN_TOP: i32 = INCH;
-const MARGIN_BOTTOM: i32 = INCH;
-const MARGIN_LEFT: i32 = INCH;
-const MARGIN_RIGHT: i32 = INCH;
-const BODY_FONT: &str = "Calibri";
-const BODY_SIZE: usize = 11 * 2; // half-points
-const HEADING1_SIZE: usize = 26 * 2;
-const HEADING2_SIZE: usize = 20 * 2;
-const HEADING3_SIZE: usize = 14 * 2;
-const HEADING4_SIZE: usize = 12 * 2;
+// Default measurement constants
 const CODE_FONT: &str = "Consolas";
-const CODE_SIZE: usize = 10 * 2;
-const LINE_SPACING: i32 = 276; // 1.15 line spacing (240 = single)
+
+/// Document-level style settings for DOCX export.
+#[derive(Debug, Clone)]
+pub struct DocxStyle {
+    pub body_font: String,
+    pub body_size_pt: f32,
+    pub line_spacing: f32, // multiplier: 1.0 = single, 1.5, 2.0 = double
+}
+
+impl Default for DocxStyle {
+    fn default() -> Self {
+        Self {
+            body_font: "Calibri".into(),
+            body_size_pt: 11.0,
+            line_spacing: 1.15,
+        }
+    }
+}
+
+impl DocxStyle {
+    fn body_size_half_pts(&self) -> usize {
+        (self.body_size_pt * 2.0) as usize
+    }
+
+    fn heading1_size(&self) -> usize {
+        ((self.body_size_pt * 2.36) * 2.0) as usize // ~26pt for 11pt body
+    }
+
+    fn heading2_size(&self) -> usize {
+        ((self.body_size_pt * 1.82) * 2.0) as usize // ~20pt for 11pt body
+    }
+
+    fn heading3_size(&self) -> usize {
+        ((self.body_size_pt * 1.27) * 2.0) as usize // ~14pt for 11pt body
+    }
+
+    fn heading4_size(&self) -> usize {
+        self.body_size_half_pts() // same as body
+    }
+
+    fn code_size(&self) -> usize {
+        ((self.body_size_pt * 0.91) * 2.0) as usize // slightly smaller
+    }
+
+    fn line_spacing_twips(&self) -> i32 {
+        (self.line_spacing * 240.0) as i32 // 240 twips = single spacing
+    }
+}
 
 fn gfm_options() -> Options<'static> {
     let mut opts = Options::default();
@@ -45,8 +79,13 @@ struct InlineState {
     superscript: bool,
 }
 
-/// Convert markdown to a fully-formatted DOCX byte buffer.
+/// Convert markdown to DOCX with default styling.
 pub fn markdown_to_docx(markdown: &str) -> Result<Vec<u8>, ConversionError> {
+    markdown_to_docx_styled(markdown, &DocxStyle::default())
+}
+
+/// Convert markdown to a fully-formatted DOCX byte buffer with custom styling.
+pub fn markdown_to_docx_styled(markdown: &str, style: &DocxStyle) -> Result<Vec<u8>, ConversionError> {
     let arena = Arena::new();
     let root = parse_document(&arena, markdown, &gfm_options());
 
@@ -127,7 +166,7 @@ pub fn markdown_to_docx(markdown: &str) -> Result<Vec<u8>, ConversionError> {
         .add_numbering(Numbering::new(2, 2));
 
     // Walk the AST and build the document
-    convert_children(root, &mut doc, 0);
+    convert_children(root, &mut doc, 0, style);
 
     let mut buf = Vec::new();
     doc.build()
@@ -142,6 +181,7 @@ fn convert_children<'a>(
     node: &'a comrak::nodes::AstNode<'a>,
     doc: &mut Docx,
     list_depth: usize,
+    style: &DocxStyle,
 ) {
     for child in node.children() {
         let ast = child.data.borrow();
@@ -149,18 +189,18 @@ fn convert_children<'a>(
             NodeValue::Heading(heading) => {
                 let level = heading.level;
                 let mut para = Paragraph::new();
-                let (style, size) = match level {
-                    1 => ("Heading1", HEADING1_SIZE),
-                    2 => ("Heading2", HEADING2_SIZE),
-                    3 => ("Heading3", HEADING3_SIZE),
-                    _ => ("Heading4", HEADING4_SIZE),
+                let (heading_style, size) = match level {
+                    1 => ("Heading1", style.heading1_size()),
+                    2 => ("Heading2", style.heading2_size()),
+                    3 => ("Heading3", style.heading3_size()),
+                    _ => ("Heading4", style.heading4_size()),
                 };
-                para = para.style(style);
+                para = para.style(heading_style);
 
                 drop(ast);
-                let runs = collect_inline_runs(child);
+                let runs = collect_inline_runs(child, style);
                 for mut run in runs {
-                    run = run.size(size).fonts(font(BODY_FONT));
+                    run = run.size(size).fonts(font(&style.body_font));
                     if level <= 2 {
                         run = run.bold();
                     }
@@ -179,13 +219,13 @@ fn convert_children<'a>(
 
             NodeValue::Paragraph => {
                 drop(ast);
-                let runs = collect_inline_runs(child);
+                let runs = collect_inline_runs(child, style);
                 let mut para = Paragraph::new();
 
                 // Apply body font and spacing
                 para = para.line_spacing(
                     LineSpacing::new()
-                        .line(LINE_SPACING)
+                        .line(style.line_spacing_twips())
                         .line_rule(LineSpacingType::Auto)
                         .after(160)
                 );
@@ -214,7 +254,7 @@ fn convert_children<'a>(
                 }
 
                 for mut run in runs {
-                    run = run.size(BODY_SIZE).fonts(font(BODY_FONT));
+                    run = run.size(style.body_size_half_pts()).fonts(font(&style.body_font));
                     para = para.add_run(run);
                 }
 
@@ -228,20 +268,20 @@ fn convert_children<'a>(
                     let bq_ast = bq_child.data.borrow();
                     if let NodeValue::Paragraph = &bq_ast.value {
                         drop(bq_ast);
-                        let runs = collect_inline_runs(bq_child);
+                        let runs = collect_inline_runs(bq_child, style);
                         let mut para = Paragraph::new()
                             .indent(Some(720), None, None, None)
                             .line_spacing(
                                 LineSpacing::new()
-                                    .line(LINE_SPACING)
+                                    .line(style.line_spacing_twips())
                                     .line_rule(LineSpacingType::Auto)
                                     .after(160)
                             );
 
                         for mut run in runs {
                             run = run
-                                .size(BODY_SIZE)
-                                .fonts(font(BODY_FONT))
+                                .size(style.body_size_half_pts())
+                                .fonts(font(&style.body_font))
                                 .italic()
                                 .color("555555");
                             para = para.add_run(run);
@@ -250,7 +290,7 @@ fn convert_children<'a>(
                         *doc = std::mem::take(doc).add_paragraph(para);
                     } else {
                         drop(bq_ast);
-                        convert_children(bq_child, doc, list_depth);
+                        convert_children(bq_child, doc, list_depth, style);
                     }
                 }
             }
@@ -265,7 +305,7 @@ fn convert_children<'a>(
                         .add_run(
                             Run::new()
                                 .add_text(line)
-                                .size(CODE_SIZE)
+                                .size(style.code_size())
                                 .fonts(font(CODE_FONT))
                                 .color("333333")
                         )
@@ -291,13 +331,13 @@ fn convert_children<'a>(
                 drop(ast);
                 let new_depth = list_depth + if list_depth > 0 { 1 } else { 0 };
                 for item_child in child.children() {
-                    convert_children(item_child, doc, new_depth);
+                    convert_children(item_child, doc, new_depth, style);
                 }
             }
 
             NodeValue::Item(_) => {
                 drop(ast);
-                convert_children(child, doc, list_depth);
+                convert_children(child, doc, list_depth, style);
             }
 
             NodeValue::Table(_alignments) => {
@@ -315,7 +355,7 @@ fn convert_children<'a>(
                             let cell_ast = cell_node.data.borrow();
                             if let NodeValue::TableCell = &cell_ast.value {
                                 drop(cell_ast);
-                                let runs = collect_inline_runs(cell_node);
+                                let runs = collect_inline_runs(cell_node, style);
                                 let mut para = Paragraph::new()
                                     .line_spacing(
                                         LineSpacing::new()
@@ -326,7 +366,7 @@ fn convert_children<'a>(
                                     );
 
                                 for mut run in runs {
-                                    run = run.size(BODY_SIZE).fonts(font(BODY_FONT));
+                                    run = run.size(style.body_size_half_pts()).fonts(font(&style.body_font));
                                     if is_header {
                                         run = run.bold();
                                     }
@@ -385,7 +425,7 @@ fn convert_children<'a>(
                         Run::new()
                             .add_text("_______________________________________")
                             .color("CCCCCC")
-                            .size(BODY_SIZE)
+                            .size(style.body_size_half_pts())
                     )
                     .align(AlignmentType::Center)
                     .line_spacing(
@@ -398,7 +438,7 @@ fn convert_children<'a>(
 
             NodeValue::FrontMatter(_) | NodeValue::Document => {
                 drop(ast);
-                convert_children(child, doc, list_depth);
+                convert_children(child, doc, list_depth, style);
             }
 
             NodeValue::HtmlBlock(html) => {
@@ -410,12 +450,12 @@ fn convert_children<'a>(
                         .add_run(
                             Run::new()
                                 .add_text(text.trim())
-                                .size(BODY_SIZE)
-                                .fonts(font(BODY_FONT))
+                                .size(style.body_size_half_pts())
+                                .fonts(font(&style.body_font))
                         )
                         .line_spacing(
                             LineSpacing::new()
-                                .line(LINE_SPACING)
+                                .line(style.line_spacing_twips())
                                 .line_rule(LineSpacingType::Auto)
                                 .after(160)
                         );
@@ -432,14 +472,14 @@ fn convert_children<'a>(
                         .add_run(
                             Run::new()
                                 .add_text(format!("[footnote]: {}", text.trim()))
-                                .size(BODY_SIZE - 4)
-                                .fonts(font(BODY_FONT))
+                                .size(style.body_size_half_pts() - 4)
+                                .fonts(font(&style.body_font))
                                 .color("666666")
                         )
                         .indent(Some(360), None, None, None)
                         .line_spacing(
                             LineSpacing::new()
-                                .line(LINE_SPACING)
+                                .line(style.line_spacing_twips())
                                 .line_rule(LineSpacingType::Auto)
                                 .after(80)
                         );
@@ -455,17 +495,18 @@ fn convert_children<'a>(
 }
 
 /// Collect inline runs from a node's children, handling nested formatting.
-fn collect_inline_runs<'a>(node: &'a comrak::nodes::AstNode<'a>) -> Vec<Run> {
+fn collect_inline_runs<'a>(node: &'a comrak::nodes::AstNode<'a>, style: &DocxStyle) -> Vec<Run> {
     let mut runs = Vec::new();
     let state = InlineState::default();
-    collect_runs_recursive(node, &state, &mut runs);
+    walk_inline_nodes(node, &state, &mut runs, style);
     runs
 }
 
-fn collect_runs_recursive<'a>(
+fn walk_inline_nodes<'a>(
     node: &'a comrak::nodes::AstNode<'a>,
     state: &InlineState,
     runs: &mut Vec<Run>,
+    style: &DocxStyle,
 ) {
     for child in node.children() {
         let ast = child.data.borrow();
@@ -490,7 +531,7 @@ fn collect_runs_recursive<'a>(
                 let mut run = Run::new()
                     .add_text(code.literal.as_str())
                     .fonts(font(CODE_FONT))
-                    .size(CODE_SIZE)
+                    .size(style.code_size())
                     .color("C7254E")
                     .highlight("lightGray");
                 if state.bold {
@@ -503,7 +544,7 @@ fn collect_runs_recursive<'a>(
                 let mut new_state = state.clone();
                 new_state.bold = true;
                 drop(ast);
-                collect_runs_recursive(child, &new_state, runs);
+                walk_inline_nodes(child, &new_state, runs, style);
                 continue;
             }
 
@@ -511,7 +552,7 @@ fn collect_runs_recursive<'a>(
                 let mut new_state = state.clone();
                 new_state.italic = true;
                 drop(ast);
-                collect_runs_recursive(child, &new_state, runs);
+                walk_inline_nodes(child, &new_state, runs, style);
                 continue;
             }
 
@@ -519,7 +560,7 @@ fn collect_runs_recursive<'a>(
                 let mut new_state = state.clone();
                 new_state.strikethrough = true;
                 drop(ast);
-                collect_runs_recursive(child, &new_state, runs);
+                walk_inline_nodes(child, &new_state, runs, style);
                 continue;
             }
 
@@ -527,14 +568,14 @@ fn collect_runs_recursive<'a>(
                 let mut new_state = state.clone();
                 new_state.link_url = Some(link.url.clone());
                 drop(ast);
-                collect_runs_recursive(child, &new_state, runs);
+                walk_inline_nodes(child, &new_state, runs, style);
                 continue;
             }
 
             NodeValue::FootnoteReference(_) => {
                 let mut run = Run::new()
                     .add_text("[*]")
-                    .size(BODY_SIZE - 4)
+                    .size(style.body_size_half_pts() - 4)
                     .color("0563C1");
                 run = apply_inline_state(run, state);
                 runs.push(run);
@@ -544,13 +585,13 @@ fn collect_runs_recursive<'a>(
                 let checkbox = if checked.is_some() { "☑ " } else { "☐ " };
                 let run = Run::new()
                     .add_text(checkbox)
-                    .size(BODY_SIZE);
+                    .size(style.body_size_half_pts());
                 runs.push(run);
             }
 
             _ => {
                 drop(ast);
-                collect_runs_recursive(child, state, runs);
+                walk_inline_nodes(child, state, runs, style);
                 continue;
             }
         }

@@ -15,6 +15,10 @@ pub struct ConvertRequest {
     pub content: String,
     pub from: FileFormat,
     pub to: FileFormat,
+    #[serde(default)]
+    pub font: Option<String>,
+    #[serde(default)]
+    pub line_height: Option<f32>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
