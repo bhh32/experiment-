@@ -63,6 +63,51 @@ pub mod formatting {
         (result, new_cursor)
     }
 
+    /// Wrap selected text (from start to end) with a color marker.
+    /// If no selection (start == end), insert the markers at cursor.
+    pub fn apply_color(content: &str, start: usize, end: usize, color: &str) -> (String, usize) {
+        let open = format!("{{color:{color}}}");
+        let close = "{/color}";
+        if start < end && end <= content.len() {
+            let mut result = String::with_capacity(content.len() + open.len() + close.len());
+            result.push_str(&content[..start]);
+            result.push_str(&open);
+            result.push_str(&content[start..end]);
+            result.push_str(close);
+            result.push_str(&content[end..]);
+            (result, end + open.len() + close.len())
+        } else {
+            let mut result = String::with_capacity(content.len() + open.len() + close.len());
+            result.push_str(&content[..start]);
+            result.push_str(&open);
+            result.push_str(close);
+            result.push_str(&content[start..]);
+            (result, start + open.len())
+        }
+    }
+
+    /// Wrap selected text with a highlight marker.
+    pub fn apply_highlight(content: &str, start: usize, end: usize, color: &str) -> (String, usize) {
+        let open = format!("{{highlight:{color}}}");
+        let close = "{/highlight}";
+        if start < end && end <= content.len() {
+            let mut result = String::with_capacity(content.len() + open.len() + close.len());
+            result.push_str(&content[..start]);
+            result.push_str(&open);
+            result.push_str(&content[start..end]);
+            result.push_str(close);
+            result.push_str(&content[end..]);
+            (result, end + open.len() + close.len())
+        } else {
+            let mut result = String::with_capacity(content.len() + open.len() + close.len());
+            result.push_str(&content[..start]);
+            result.push_str(&open);
+            result.push_str(close);
+            result.push_str(&content[start..]);
+            (result, start + open.len())
+        }
+    }
+
     /// Insert a page break marker at cursor.
     pub fn insert_page_break(content: &str, cursor: usize) -> (String, usize) {
         let pb = "\n{pagebreak}\n";
@@ -288,5 +333,24 @@ mod tests {
     fn justify_alignment() {
         let (text, _) = toggle_alignment("hello", 0, "justify");
         assert_eq!(text, "{justify}hello");
+    }
+
+    #[test]
+    fn color_wraps_selection() {
+        let (text, _) = apply_color("hello world", 6, 11, "FF0000");
+        assert_eq!(text, "hello {color:FF0000}world{/color}");
+    }
+
+    #[test]
+    fn color_at_cursor() {
+        let (text, pos) = apply_color("hello", 5, 5, "0000FF");
+        assert_eq!(text, "hello{color:0000FF}{/color}");
+        assert_eq!(pos, 5 + "{color:0000FF}".len());
+    }
+
+    #[test]
+    fn highlight_wraps_selection() {
+        let (text, _) = apply_highlight("hello world", 6, 11, "yellow");
+        assert_eq!(text, "hello {highlight:yellow}world{/highlight}");
     }
 }

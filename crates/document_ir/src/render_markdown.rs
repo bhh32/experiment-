@@ -219,8 +219,17 @@ fn runs_to_markdown(runs: &[Run]) -> String {
         if run.properties.code {
             text = format!("`{text}`");
         }
+        if run.properties.underline {
+            text = format!("__{text}__");
+        }
         if let Some(ref url) = run.properties.link_url {
             text = format!("[{text}]({url})");
+        }
+        if let Some(ref color) = run.properties.color {
+            text = format!("{{color:{color}}}{text}{{/color}}");
+        }
+        if let Some(ref highlight) = run.properties.highlight {
+            text = format!("{{highlight:{highlight}}}{text}{{/highlight}}");
         }
 
         out.push_str(&text);

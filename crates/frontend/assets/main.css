@@ -135,6 +135,15 @@ body {
     min-width: 100px;
 }
 
+.color-select {
+    min-width: 36px;
+    font-weight: bold;
+}
+
+.highlight-select {
+    min-width: 36px;
+}
+
 /* Formatting icon styles */
 .icon-bold { font-weight: 800; font-size: 14px; font-family: serif; }
 .icon-italic { font-style: italic; font-weight: 600; font-size: 14px; font-family: serif; }

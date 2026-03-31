@@ -203,6 +203,58 @@ pub fn ToolbarUi(
                 span { class: "icon-strike", "S" }
             }
 
+            // ─── Text Color ───
+            select {
+                class: "tool-select color-select",
+                title: "Text Color",
+                onchange: move |evt| {
+                    let color = evt.value();
+                    if color == "none" { return; }
+                    let val = content.read().clone();
+                    let (start, end) = get_selection_range();
+                    let (new_text, new_pos) = toolbar::formatting::apply_color(&val, start, end, &color);
+                    content.set(new_text);
+                    set_cursor_position(new_pos);
+                },
+                option { value: "none", "A" }
+                option { value: "000000", style: "color:#000000", "■ Black" }
+                option { value: "FF0000", style: "color:#FF0000", "■ Red" }
+                option { value: "0000FF", style: "color:#0000FF", "■ Blue" }
+                option { value: "008000", style: "color:#008000", "■ Green" }
+                option { value: "FF6600", style: "color:#FF6600", "■ Orange" }
+                option { value: "800080", style: "color:#800080", "■ Purple" }
+                option { value: "808080", style: "color:#808080", "■ Gray" }
+                option { value: "8B0000", style: "color:#8B0000", "■ Dark Red" }
+                option { value: "00008B", style: "color:#00008B", "■ Dark Blue" }
+                option { value: "006400", style: "color:#006400", "■ Dark Green" }
+                option { value: "4B0082", style: "color:#4B0082", "■ Indigo" }
+                option { value: "A52A2A", style: "color:#A52A2A", "■ Brown" }
+            }
+
+            // ─── Highlight Color ───
+            select {
+                class: "tool-select highlight-select",
+                title: "Highlight Color",
+                onchange: move |evt| {
+                    let color = evt.value();
+                    if color == "none" { return; }
+                    let val = content.read().clone();
+                    let (start, end) = get_selection_range();
+                    let (new_text, new_pos) = toolbar::formatting::apply_highlight(&val, start, end, &color);
+                    content.set(new_text);
+                    set_cursor_position(new_pos);
+                },
+                option { value: "none", "🖍" }
+                option { value: "yellow", style: "background:#FFFF00", "■ Yellow" }
+                option { value: "cyan", style: "background:#00FFFF", "■ Cyan" }
+                option { value: "lime", style: "background:#00FF00", "■ Lime" }
+                option { value: "magenta", style: "background:#FF00FF", "■ Magenta" }
+                option { value: "red", style: "background:#FF0000;color:#fff", "■ Red" }
+                option { value: "blue", style: "background:#0000FF;color:#fff", "■ Blue" }
+                option { value: "green", style: "background:#008000;color:#fff", "■ Green" }
+                option { value: "lightGray", style: "background:#D3D3D3", "■ Light Gray" }
+            }
+
             div { class: "tool-separator" }
 
             // ─── Alignment ───

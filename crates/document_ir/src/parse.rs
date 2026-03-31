@@ -190,11 +190,116 @@ fn extract_standalone_image<'a>(node: &'a comrak::nodes::AstNode<'a>) -> Option<
     None
 }
 
-/// Collect inline runs from an AST node.
+/// Collect inline runs from an AST node, then post-process for color markers.
 fn collect_runs<'a>(node: &'a comrak::nodes::AstNode<'a>) -> Vec<Run> {
     let mut runs = Vec::new();
     collect_runs_inner(node, &mut runs, &RunProperties::default());
-    runs
+    expand_color_markers(runs)
+}
+
+/// Post-process runs to handle `{color:XXXXXX}...{/color}` and `{highlight:name}...{/highlight}` markers.
+/// These markers appear as plain text since comrak doesn't know about them.
+fn expand_color_markers(runs: Vec<Run>) -> Vec<Run> {
+    // First, concatenate all text to find markers that might span across runs
+    // But since markers are typically within a single text node, process per-run first
+    let mut result = Vec::new();
+
+    // Track active color/highlight state across runs
+    let mut active_color: Option<String> = None;
+    let mut active_highlight: Option<String> = None;
+
+    for run in runs {
+        let text = &run.text;
+
+        // If this run has no color markers, apply active state and continue
+        if !text.contains("{color:") && !text.contains("{/color}") &&
+           !text.contains("{highlight:") && !text.contains("{/highlight}") {
+            let mut props = run.properties.clone();
+            if let Some(ref c) = active_color {
+                props.color = Some(c.clone());
+            }
+            if let Some(ref h) = active_highlight {
+                props.highlight = Some(h.clone());
+            }
+            result.push(Run { text: run.text, properties: props });
+            continue;
+        }
+
+        // Split text at color/highlight markers, always processing the earliest one first
+        let mut remaining = text.as_str();
+        while !remaining.is_empty() {
+            // Find the earliest marker of any type
+            let markers: Vec<(usize, &str)> = [
+                ("{color:", "open_color"),
+                ("{/color}", "close_color"),
+                ("{highlight:", "open_highlight"),
+                ("{/highlight}", "close_highlight"),
+            ]
+            .iter()
+            .filter_map(|(pat, kind)| remaining.find(pat).map(|pos| (pos, *kind)))
+            .collect();
+
+            let earliest = markers.iter().min_by_key(|(pos, _)| *pos);
+
+            match earliest {
+                Some(&(start, "open_color")) => {
+                    if start > 0 {
+                        let mut props = run.properties.clone();
+                        if let Some(ref c) = active_color { props.color = Some(c.clone()); }
+                        if let Some(ref h) = active_highlight { props.highlight = Some(h.clone()); }
+                        result.push(Run { text: remaining[..start].to_string(), properties: props });
+                    }
+                    let after = &remaining[start + 7..];
+                    if let Some(close) = after.find('}') {
+                        active_color = Some(after[..close].to_string());
+                        remaining = &after[close + 1..];
+                    } else { break; }
+                }
+                Some(&(start, "close_color")) => {
+                    if start > 0 {
+                        let mut props = run.properties.clone();
+                        if let Some(ref c) = active_color { props.color = Some(c.clone()); }
+                        if let Some(ref h) = active_highlight { props.highlight = Some(h.clone()); }
+                        result.push(Run { text: remaining[..start].to_string(), properties: props });
+                    }
+                    active_color = None;
+                    remaining = &remaining[start + 8..];
+                }
+                Some(&(start, "open_highlight")) => {
+                    if start > 0 {
+                        let mut props = run.properties.clone();
+                        if let Some(ref c) = active_color { props.color = Some(c.clone()); }
+                        if let Some(ref h) = active_highlight { props.highlight = Some(h.clone()); }
+                        result.push(Run { text: remaining[..start].to_string(), properties: props });
+                    }
+                    let after = &remaining[start + 11..];
+                    if let Some(close) = after.find('}') {
+                        active_highlight = Some(after[..close].to_string());
+                        remaining = &after[close + 1..];
+                    } else { break; }
+                }
+                Some(&(start, "close_highlight")) => {
+                    if start > 0 {
+                        let mut props = run.properties.clone();
+                        if let Some(ref c) = active_color { props.color = Some(c.clone()); }
+                        if let Some(ref h) = active_highlight { props.highlight = Some(h.clone()); }
+                        result.push(Run { text: remaining[..start].to_string(), properties: props });
+                    }
+                    active_highlight = None;
+                    remaining = &remaining[start + 12..];
+                }
+                _ => {
+                    let mut props = run.properties.clone();
+                    if let Some(ref c) = active_color { props.color = Some(c.clone()); }
+                    if let Some(ref h) = active_highlight { props.highlight = Some(h.clone()); }
+                    result.push(Run { text: remaining.to_string(), properties: props });
+                    break;
+                }
+            }
+        }
+    }
+
+    result
 }
 
 fn collect_runs_inner<'a>(

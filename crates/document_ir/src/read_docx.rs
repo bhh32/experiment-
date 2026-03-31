@@ -173,6 +173,24 @@ fn convert_run(run: &docx_rs::Run) -> ir::Run {
     if run.run_property.underline.is_some() { props.underline = true; }
     if run.run_property.strike.is_some() { props.strikethrough = true; }
 
+    // Extract text color (val is private, use serde to access)
+    if let Some(ref color) = run.run_property.color {
+        if let Ok(val) = serde_json::to_value(color) {
+            if let Some(s) = val.as_str() {
+                props.color = Some(s.to_string());
+            }
+        }
+    }
+
+    // Extract highlight color
+    if let Some(ref highlight) = run.run_property.highlight {
+        if let Ok(val) = serde_json::to_value(highlight) {
+            if let Some(s) = val.as_str() {
+                props.highlight = Some(s.to_string());
+            }
+        }
+    }
+
     // Extract font name
     if let Some(name) = extract_font_name(&run.run_property.fonts) {
         props.font = Some(name);
