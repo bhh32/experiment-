@@ -136,7 +136,7 @@ test.describe('Newlines and Page Breaks', () => {
     await textarea.focus();
     // Move cursor to end
     await page.keyboard.press('End');
-    await page.locator('.tool-btn:text-is("PgBrk")').click();
+    await page.locator('[title="Page Break"]').click();
 
     const value = await textarea.inputValue();
     expect(value).toContain('{pagebreak}');

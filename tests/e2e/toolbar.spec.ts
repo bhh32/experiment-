@@ -9,7 +9,7 @@ test.describe('Toolbar Formatting', () => {
   test('Bold button inserts ** markers', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.focus();
-    await page.locator('.tool-btn:text-is("B")').click();
+    await page.locator('[title="Bold (Ctrl+B)"]').click();
     const value = await textarea.inputValue();
     expect(value).toContain('****');
   });
@@ -17,47 +17,48 @@ test.describe('Toolbar Formatting', () => {
   test('Italic button inserts * markers', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.focus();
-    await page.locator('.tool-btn:text-is("I")').click();
+    await page.locator('[title="Italic (Ctrl+I)"]').click();
     const value = await textarea.inputValue();
     expect(value).toContain('**');
+  });
+
+  test('Underline button inserts __ markers', async ({ page }) => {
+    const textarea = page.locator('.editor-textarea');
+    await textarea.focus();
+    await page.locator('[title="Underline (Ctrl+U)"]').click();
+    const value = await textarea.inputValue();
+    expect(value).toContain('____');
+  });
+
+  test('Strikethrough button inserts ~~ markers', async ({ page }) => {
+    const textarea = page.locator('.editor-textarea');
+    await textarea.focus();
+    await page.locator('[title="Strikethrough"]').click();
+    const value = await textarea.inputValue();
+    expect(value).toContain('~~~~');
   });
 
   test('H1 button inserts heading marker', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.focus();
-    await page.locator('.tool-btn:text-is("H1")').click();
+    // Use paragraph style dropdown
+    await page.locator('.style-select').selectOption('h1');
     const value = await textarea.inputValue();
     expect(value).toContain('# ');
-  });
-
-  test('H2 button inserts heading marker', async ({ page }) => {
-    const textarea = page.locator('.editor-textarea');
-    await textarea.focus();
-    await page.locator('.tool-btn:text-is("H2")').click();
-    const value = await textarea.inputValue();
-    expect(value).toContain('## ');
-  });
-
-  test('H3 button inserts heading marker', async ({ page }) => {
-    const textarea = page.locator('.editor-textarea');
-    await textarea.focus();
-    await page.locator('.tool-btn:text-is("H3")').click();
-    const value = await textarea.inputValue();
-    expect(value).toContain('### ');
   });
 
   test('List button inserts bullet marker', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.focus();
-    await page.locator('.tool-btn:text-is("List")').click();
+    await page.locator('[title="Bullet List"]').click();
     const value = await textarea.inputValue();
     expect(value).toContain('- ');
   });
 
-  test('Ordered list button inserts number marker', async ({ page }) => {
+  test('Numbered list button inserts number marker', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.focus();
-    await page.locator('.tool-btn:text-is("1.")').click();
+    await page.locator('[title="Numbered List"]').click();
     const value = await textarea.inputValue();
     expect(value).toContain('1. ');
   });
@@ -65,7 +66,7 @@ test.describe('Toolbar Formatting', () => {
   test('Link button inserts link template', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.focus();
-    await page.locator('.tool-btn:text-is("Link")').click();
+    await page.locator('[title="Link (Ctrl+K)"]').click();
     const value = await textarea.inputValue();
     expect(value).toContain('[link text](url)');
   });
@@ -73,7 +74,7 @@ test.describe('Toolbar Formatting', () => {
   test('Code button inserts code block', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.focus();
-    await page.locator('.tool-btn:text-is("Code")').click();
+    await page.locator('[title="Code Block"]').click();
     const value = await textarea.inputValue();
     expect(value).toContain('```');
   });
@@ -81,7 +82,7 @@ test.describe('Toolbar Formatting', () => {
   test('HR button inserts horizontal rule', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.focus();
-    await page.locator('.tool-btn:text-is("HR")').click();
+    await page.locator('[title="Horizontal Rule"]').click();
     const value = await textarea.inputValue();
     expect(value).toContain('---');
   });
@@ -89,10 +90,8 @@ test.describe('Toolbar Formatting', () => {
   test('Bold button updates preview', async ({ page }) => {
     const textarea = page.locator('.editor-textarea');
     await textarea.fill('hello');
-    // Place cursor at position 5 and click Bold
     await textarea.focus();
-    await page.locator('.tool-btn:text-is("B")').click();
-    // Should have bold markers in the text
+    await page.locator('[title="Bold (Ctrl+B)"]').click();
     const value = await textarea.inputValue();
     expect(value).toContain('****');
   });
@@ -101,8 +100,44 @@ test.describe('Toolbar Formatting', () => {
     const textarea = page.locator('.editor-textarea');
     await textarea.fill('My Title');
     await textarea.focus();
-    await page.locator('.tool-btn:text-is("H1")').click();
-    // Wait for preview to update
+    await page.locator('.style-select').selectOption('h1');
     await expect(page.locator('.preview-content h1')).toBeVisible();
+  });
+
+  test('Bold wraps selected text', async ({ page }) => {
+    const textarea = page.locator('.editor-textarea');
+    await textarea.fill('select this text');
+    await textarea.focus();
+    // Select "this"
+    await textarea.evaluate((el: HTMLTextAreaElement) => {
+      el.setSelectionRange(7, 11);
+    });
+    await page.locator('[title="Bold (Ctrl+B)"]').click();
+    const value = await textarea.inputValue();
+    expect(value).toContain('**this**');
+  });
+
+  test('Italic wraps selected text', async ({ page }) => {
+    const textarea = page.locator('.editor-textarea');
+    await textarea.fill('select this text');
+    await textarea.focus();
+    await textarea.evaluate((el: HTMLTextAreaElement) => {
+      el.setSelectionRange(7, 11);
+    });
+    await page.locator('[title="Italic (Ctrl+I)"]').click();
+    const value = await textarea.inputValue();
+    expect(value).toContain('*this*');
+  });
+
+  test('Underline wraps selected text', async ({ page }) => {
+    const textarea = page.locator('.editor-textarea');
+    await textarea.fill('select this text');
+    await textarea.focus();
+    await textarea.evaluate((el: HTMLTextAreaElement) => {
+      el.setSelectionRange(7, 11);
+    });
+    await page.locator('[title="Underline (Ctrl+U)"]').click();
+    const value = await textarea.inputValue();
+    expect(value).toContain('__this__');
   });
 });

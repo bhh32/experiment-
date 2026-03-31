@@ -24,10 +24,19 @@ test.describe('Editor View', () => {
   });
 
   test('shows toolbar with formatting buttons', async ({ page }) => {
-    const buttons = ['B', 'I', 'H1', 'H2', 'H3', 'List', '1.', 'Link', 'Code', 'HR'];
-    for (const label of buttons) {
-      await expect(page.locator(`.tool-btn:text-is("${label}")`)).toBeVisible();
+    const titles = [
+      'Bold (Ctrl+B)', 'Italic (Ctrl+I)', 'Underline (Ctrl+U)', 'Strikethrough',
+      'Align Left', 'Center', 'Align Right', 'Justify',
+      'Bullet List', 'Numbered List',
+      'Link (Ctrl+K)', 'Code Block', 'Horizontal Rule', 'Page Break',
+    ];
+    for (const title of titles) {
+      await expect(page.locator(`[title="${title}"]`)).toBeVisible();
     }
+  });
+
+  test('shows paragraph style dropdown', async ({ page }) => {
+    await expect(page.locator('.style-select')).toBeVisible();
   });
 
   test('shows font, size, and line height selectors', async ({ page }) => {
@@ -101,10 +110,10 @@ test.describe('Editor View', () => {
     expect(bg).toContain('128');
   });
 
-  test('alignment buttons are visible (L, C, R, J)', async ({ page }) => {
-    await expect(page.locator('.tool-btn:text-is("L")')).toBeVisible();
-    await expect(page.locator('.tool-btn:text-is("C")')).toBeVisible();
-    await expect(page.locator('.tool-btn:text-is("R")')).toBeVisible();
-    await expect(page.locator('.tool-btn:text-is("J")')).toBeVisible();
+  test('alignment buttons are visible', async ({ page }) => {
+    await expect(page.locator('[title="Align Left"]')).toBeVisible();
+    await expect(page.locator('[title="Center"]')).toBeVisible();
+    await expect(page.locator('[title="Align Right"]')).toBeVisible();
+    await expect(page.locator('[title="Justify"]')).toBeVisible();
   });
 });

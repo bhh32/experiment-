@@ -108,33 +108,48 @@ body {
 }
 
 .tool-btn {
-    background: #fff;
+    background: transparent;
     border: 1px solid transparent;
-    padding: 3px 7px;
+    padding: 2px 5px;
     cursor: pointer;
-    font-size: 13px;
-    font-weight: 600;
-    border-radius: 2px;
-    min-width: 28px;
+    font-size: 14px;
+    border-radius: 3px;
+    min-width: 26px;
     height: 26px;
     display: flex;
     align-items: center;
     justify-content: center;
-    color: #333;
+    color: #444;
 }
 
 .tool-btn:hover {
-    background: #e0e0e0;
-    border-color: #b0b0b0;
+    background: #dde4ee;
+    border-color: #b8c5d6;
 }
 
 .tool-btn:active {
-    background: #d0d0d0;
+    background: #c8d4e4;
 }
 
 .style-select {
     min-width: 100px;
 }
+
+/* Formatting icon styles */
+.icon-bold { font-weight: 800; font-size: 14px; font-family: serif; }
+.icon-italic { font-style: italic; font-weight: 600; font-size: 14px; font-family: serif; }
+.icon-underline { text-decoration: underline; font-weight: 600; font-size: 14px; font-family: serif; }
+.icon-strike { text-decoration: line-through; font-weight: 600; font-size: 14px; font-family: serif; }
+.icon-align { font-size: 12px; text-align: left; }
+.icon-center { font-size: 12px; }
+.icon-right { font-size: 12px; text-align: right; direction: rtl; }
+.icon-justify { font-size: 12px; letter-spacing: 2px; }
+.icon-ul { font-size: 11px; letter-spacing: -1px; }
+.icon-ol { font-size: 11px; font-weight: 600; }
+.icon-link { font-size: 13px; }
+.icon-code { font-size: 10px; font-family: monospace; font-weight: 600; }
+.icon-hr { font-size: 16px; line-height: 1; }
+.icon-pgbrk { font-size: 14px; }
 
 /* ─── Main Layout ─── */
 .main-layout {

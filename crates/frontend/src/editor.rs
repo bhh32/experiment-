@@ -60,6 +60,29 @@ pub fn EditorView() -> Element {
                     content.set(new_text);
                     set_cursor_position(new_pos);
                 }
+                Key::Character(ref c) if c == "u" => {
+                    evt.prevent_default();
+                    let val = content.read().clone();
+                    let (start, end) = get_selection_range();
+                    if start < end && end <= val.len() {
+                        let mut result = String::with_capacity(val.len() + 4);
+                        result.push_str(&val[..start]);
+                        result.push_str("__");
+                        result.push_str(&val[start..end]);
+                        result.push_str("__");
+                        result.push_str(&val[end..]);
+                        content.set(result);
+                        set_cursor_position(end + 4);
+                    } else {
+                        let cursor = start;
+                        let mut result = String::with_capacity(val.len() + 4);
+                        result.push_str(&val[..cursor]);
+                        result.push_str("____");
+                        result.push_str(&val[cursor..]);
+                        content.set(result);
+                        set_cursor_position(cursor + 2);
+                    }
+                }
                 Key::Character(ref c) if c == "s" => {
                     evt.prevent_default();
                     let path = file_path.read().clone();
@@ -199,6 +222,28 @@ pub fn get_cursor_position() -> usize {
     #[cfg(not(target_arch = "wasm32"))]
     {
         0
+    }
+}
+
+/// Get the selection range (start, end). If no selection, start == end == cursor.
+pub fn get_selection_range() -> (usize, usize) {
+    #[cfg(target_arch = "wasm32")]
+    {
+        use wasm_bindgen::JsCast;
+        let window = web_sys::window().unwrap();
+        let doc = window.document().unwrap();
+        if let Some(el) = doc.get_element_by_id("editor-textarea") {
+            if let Ok(textarea) = el.dyn_into::<web_sys::HtmlTextAreaElement>() {
+                let start = textarea.selection_start().unwrap_or(Some(0)).unwrap_or(0) as usize;
+                let end = textarea.selection_end().unwrap_or(Some(0)).unwrap_or(0) as usize;
+                return (start, end);
+            }
+        }
+        (0, 0)
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        (0, 0)
     }
 }
 
