@@ -5,6 +5,8 @@ mod file_menu;
 mod toolbar_ui;
 mod preview_pane;
 mod styles_sidebar;
+mod history;
+mod find_replace;
 mod api;
 
 fn main() {

@@ -1468,6 +1468,7 @@ dependencies = [
  "dioxus",
  "document_ir",
  "gloo-net",
+ "gloo-timers",
  "js-sys",
  "markdown_preview",
  "serde",
