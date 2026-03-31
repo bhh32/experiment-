@@ -243,6 +243,14 @@ body {
     min-width: 0;
 }
 
+/* Scale pages to fit within the preview pane when viewport is narrow */
+@media (max-width: 1600px) {
+    .docx-page, .odt-page, .md-page {
+        width: 100% !important;
+        max-width: 8.5in;
+    }
+}
+
 .preview-content {
     line-height: 1.6;
 }

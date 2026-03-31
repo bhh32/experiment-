@@ -79,7 +79,11 @@ pub fn ToolbarUi(
                 value: "{font_family}",
                 onchange: move |evt| font_family.set(evt.value().clone()),
                 for &f in FONT_OPTIONS {
-                    option { value: f, "{f}" }
+                    option {
+                        value: f,
+                        selected: *font_family.read() == f,
+                        "{f}"
+                    }
                 }
             }
 
@@ -94,7 +98,11 @@ pub fn ToolbarUi(
                     }
                 },
                 for &s in FONT_SIZE_OPTIONS {
-                    option { value: s, "{s}" }
+                    option {
+                        value: s,
+                        selected: format!("{}", *font_size.read()) == s || format!("{:.0}", *font_size.read()) == s,
+                        "{s}"
+                    }
                 }
             }
 
@@ -109,7 +117,11 @@ pub fn ToolbarUi(
                     }
                 },
                 for &(val, label) in LINE_HEIGHT_OPTIONS {
-                    option { value: val, "{label}" }
+                    option {
+                        value: val,
+                        selected: format!("{:.1}", *line_height.read()) == val || format!("{}", *line_height.read()) == val,
+                        "{label}"
+                    }
                 }
             }
 
