@@ -73,11 +73,11 @@ test.describe('DOCX Export Formatting', () => {
     expect(xml).toContain('w:left="1440"');
   });
 
-  test('line spacing is double (480 twips)', async ({ request, page }) => {
+  test('line spacing defaults to single (240 twips)', async ({ request, page }) => {
     const data = await convertToDocx(request, 'Body text.');
     await page.goto('/');
     const xml = await getDocxXml(page, data.content);
-    expect(xml).toContain('w:line="480"');
+    expect(xml).toContain('w:line="240"');
   });
 
   test('headings use named styles (Heading1, Heading2)', async ({ request, page }) => {

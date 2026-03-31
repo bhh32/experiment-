@@ -21,12 +21,13 @@ impl Default for DocStyle {
 }
 
 impl DocStyle {
-    /// Academic defaults: Times New Roman, 12pt, double-spaced, 1" margins, US Letter
+    /// Academic defaults: Times New Roman, 12pt, single-spaced, 1" margins, US Letter
+    /// Line spacing changes are intentional from the user.
     pub fn academic() -> Self {
         Self {
             body_font: "Times New Roman".into(),
             body_size_pt: 12.0,
-            line_spacing: 2.0,
+            line_spacing: 1.0,
             code_font: "Courier New".into(),
             page_width_in: 8.5,
             page_height_in: 11.0,
@@ -34,12 +35,12 @@ impl DocStyle {
         }
     }
 
-    /// Business/modern defaults: Calibri, 11pt, 1.15 spacing
+    /// Business/modern defaults: Calibri, 11pt, single spacing
     pub fn business() -> Self {
         Self {
             body_font: "Calibri".into(),
             body_size_pt: 11.0,
-            line_spacing: 1.15,
+            line_spacing: 1.0,
             code_font: "Consolas".into(),
             page_width_in: 8.5,
             page_height_in: 11.0,

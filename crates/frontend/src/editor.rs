@@ -13,7 +13,7 @@ pub fn EditorView() -> Element {
     let mut preview_mode = use_signal(|| "markdown".to_string());
     let mut font_family = use_signal(|| "Times New Roman".to_string());
     let mut font_size = use_signal(|| 12.0f32);
-    let mut line_height = use_signal(|| 2.0f32);
+    let mut line_height = use_signal(|| 1.0f32);
 
     // Word and character counts
     let word_count = use_memo(move || {
