@@ -37,6 +37,9 @@ pub fn render_to_html(doc: &Document, style: &DocStyle) -> String {
         result.push_str(&pages.join(r#"<div class="page-break"></div>"#));
     }
 
+    // Footnotes
+    render_footnotes(&doc.footnotes, &mut result);
+
     // Footer
     if let Some(ref ftr) = doc.footer {
         let align = if ftr.alignment != Alignment::Left {
@@ -148,6 +151,9 @@ fn render_block(block: &Block, out: &mut String, style: &DocStyle) {
         Block::PageBreak => {
             // Handled at the top level in render_to_html
         }
+        Block::SectionBreak => {
+            out.push_str("<hr class=\"section-break\">\n");
+        }
     }
 }
 
@@ -158,7 +164,35 @@ fn render_runs(runs: &[Run], out: &mut String) {
             continue;
         }
 
-        let mut open_tags = Vec::new();
+        // Footnote reference renders as superscript link
+        if let Some(id) = run.properties.footnote_ref {
+            out.push_str(&format!(
+                "<sup class=\"footnote-ref\"><a href=\"#fn-{id}\">[{id}]</a></sup>"
+            ));
+            continue;
+        }
+
+        let mut open_tags: Vec<&str> = Vec::new();
+
+        // Build inline style for color/highlight/font/size
+        let mut styles = Vec::new();
+        if let Some(ref color) = run.properties.color {
+            styles.push(format!("color:#{color}"));
+        }
+        if let Some(ref hl) = run.properties.highlight {
+            styles.push(format!("background-color:{hl}"));
+        }
+        if let Some(ref font) = run.properties.font {
+            styles.push(format!("font-family:'{font}'"));
+        }
+        if let Some(size) = run.properties.size_pt {
+            styles.push(format!("font-size:{size}pt"));
+        }
+
+        if !styles.is_empty() {
+            out.push_str(&format!(r#"<span style="{}">"#, styles.join(";")));
+            open_tags.push("span");
+        }
 
         if let Some(ref url) = run.properties.link_url {
             out.push_str(&format!(r#"<a href="{}">"#, html_escape(url)));
@@ -172,9 +206,21 @@ fn render_runs(runs: &[Run], out: &mut String) {
             out.push_str("<em>");
             open_tags.push("em");
         }
+        if run.properties.underline {
+            out.push_str("<u>");
+            open_tags.push("u");
+        }
         if run.properties.strikethrough {
             out.push_str("<del>");
             open_tags.push("del");
+        }
+        if run.properties.superscript {
+            out.push_str("<sup>");
+            open_tags.push("sup");
+        }
+        if run.properties.subscript {
+            out.push_str("<sub>");
+            open_tags.push("sub");
         }
         if run.properties.code {
             out.push_str("<code>");
@@ -187,6 +233,21 @@ fn render_runs(runs: &[Run], out: &mut String) {
             out.push_str(&format!("</{tag}>"));
         }
     }
+}
+
+/// Render footnotes section at the end of the document.
+pub fn render_footnotes(footnotes: &[Footnote], out: &mut String) {
+    if footnotes.is_empty() {
+        return;
+    }
+    out.push_str(r#"<hr class="footnote-separator"><ol class="footnotes">"#);
+    out.push('\n');
+    for note in footnotes {
+        out.push_str(&format!(r#"<li id="fn-{}">"#, note.id));
+        render_runs(&note.runs, out);
+        out.push_str("</li>\n");
+    }
+    out.push_str("</ol>\n");
 }
 
 fn cell_align_attr(cell: &TableCell) -> String {

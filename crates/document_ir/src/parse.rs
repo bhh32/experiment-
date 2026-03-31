@@ -24,11 +24,11 @@ pub fn parse_markdown(markdown: &str) -> Document {
     let mut blocks = Vec::new();
     convert_children(root, &mut blocks, &preprocessed);
 
-    Document {
-        children: blocks,
-        header: preprocessed.header,
-        footer: preprocessed.footer,
-    }
+    let mut doc = Document::new();
+    doc.children = blocks;
+    doc.header = preprocessed.header;
+    doc.footer = preprocessed.footer;
+    doc
 }
 
 struct Preprocessed {
@@ -401,12 +401,9 @@ fn convert_children<'a>(
                     for (col_idx, cell_node) in row_node.children().enumerate() {
                         let runs = collect_runs(cell_node);
                         let col_align = col_alignments.get(col_idx).copied().unwrap_or(Alignment::Left);
-                        cells.push(TableCell {
-                            runs,
-                            alignment: col_align,
-                            is_header: is_header_row || is_first_row,
-                            col_span: 1,
-                        });
+                        let mut cell = TableCell::new(runs, is_header_row || is_first_row);
+                        cell.alignment = col_align;
+                        cells.push(cell);
                     }
 
                     if is_header_row || is_first_row {

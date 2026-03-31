@@ -153,11 +153,15 @@ fn render_blocks(blocks: &[ir::Block], docx: &mut Docx, style: &DocStyle, list_d
                     for run in &cell.runs {
                         para = para.add_run(make_run(run, style, style.body_size_half_pts()).bold());
                     }
+                    let shading_color = cell.shading.as_deref().unwrap_or("e8e8e8");
                     let mut tc = TableCell::new()
                         .add_paragraph(para)
-                        .shading(Shading::new().fill("e8e8e8"));
+                        .shading(Shading::new().fill(shading_color));
                     if cell.col_span > 1 {
                         tc = tc.grid_span(cell.col_span as usize);
+                    }
+                    if cell.row_span > 1 {
+                        tc = tc.vertical_merge(VMergeType::Restart);
                     }
                     header_cells.push(tc);
                 }
@@ -237,6 +241,10 @@ fn render_blocks(blocks: &[ir::Block], docx: &mut Docx, style: &DocStyle, list_d
             ir::Block::ThematicBreak => {
                 *docx = std::mem::take(docx).add_paragraph(Paragraph::new());
             }
+            ir::Block::SectionBreak => {
+                // Section breaks in DOCX are handled via section properties
+                *docx = std::mem::take(docx).add_paragraph(Paragraph::new());
+            }
         }
     }
 }
@@ -283,10 +291,24 @@ fn make_run(run: &ir::Run, style: &DocStyle, half_pts: usize) -> Run {
         return Run::new().add_break(BreakType::TextWrapping);
     }
 
+    // Footnote reference: superscript number
+    if let Some(id) = run.properties.footnote_ref {
+        return Run::new()
+            .add_text(format!("[{id}]"))
+            .size(half_pts)
+            .fonts(font(&style.body_font))
+            .bold();
+    }
+
+    let run_font = run.properties.font.as_deref().unwrap_or(&style.body_font);
+    let run_half_pts = run.properties.size_pt
+        .map(|pt| (pt * 2.0) as usize)
+        .unwrap_or(half_pts);
+
     let mut r = Run::new()
         .add_text(&run.text)
-        .size(half_pts)
-        .fonts(font(&style.body_font));
+        .size(run_half_pts)
+        .fonts(font(run_font));
 
     if run.properties.bold {
         r = r.bold();
@@ -294,12 +316,24 @@ fn make_run(run: &ir::Run, style: &DocStyle, half_pts: usize) -> Run {
     if run.properties.italic {
         r = r.italic();
     }
+    if run.properties.underline {
+        r = r.underline("single");
+    }
     if run.properties.strikethrough {
         r = r.strike();
     }
+    // Note: docx-rs 0.4 doesn't expose vert_align on Run builder.
+    // Superscript/subscript render correctly in HTML preview but
+    // are omitted from DOCX export until docx-rs adds support.
     if run.properties.code {
         let code_half = (style.code_size_pt() * 2.0) as usize;
         r = r.size(code_half).fonts(font(&style.code_font));
+    }
+    if let Some(ref color) = run.properties.color {
+        r = r.color(color);
+    }
+    if let Some(ref hl) = run.properties.highlight {
+        r = r.highlight(hl);
     }
     if run.properties.link_url.is_some() {
         r = r.color("0563C1").underline("single");
