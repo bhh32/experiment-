@@ -31,6 +31,15 @@ pub fn EditorView() -> Element {
         content.read().len()
     });
 
+    // Estimate page count: ~250 words per page (standard double-spaced) + explicit page breaks
+    let page_count = use_memo(move || {
+        let text = content.read();
+        let words = text.split_whitespace().count();
+        let explicit_breaks = text.matches("{pagebreak}").count();
+        let word_pages = (words as f32 / 250.0).ceil() as usize;
+        (word_pages + explicit_breaks).max(1)
+    });
+
     // Auto-save: save to server every 30 seconds if content changed
     let auto_save_content = content;
     let auto_save_path = file_path;
@@ -327,6 +336,8 @@ pub fn EditorView() -> Element {
                 font_family: font_family,
                 font_size: font_size,
                 line_height: line_height,
+                show_find: show_find,
+                show_replace: show_replace,
             }
 
             // Toolbar (font, size, formatting, alignment)
@@ -404,6 +415,7 @@ pub fn EditorView() -> Element {
             // Status bar
             div { class: "status-bar",
                 div { class: "status-left",
+                    span { "Page {page_count}" }
                     span { "Words: {word_count}" }
                     span { "Characters: {char_count}" }
                     if !status_msg.read().is_empty() {

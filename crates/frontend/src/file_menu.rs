@@ -10,6 +10,8 @@ pub fn FileMenu(
     font_family: Signal<String>,
     font_size: Signal<f32>,
     line_height: Signal<f32>,
+    show_find: Signal<bool>,
+    show_replace: Signal<bool>,
 ) -> Element {
     let mut show_open_dialog = use_signal(|| false);
     let mut files_list = use_signal(Vec::<FileEntry>::new);
@@ -162,10 +164,179 @@ pub fn FileMenu(
                 }
 
                 // Edit menu
-                button { class: "menu-item", onclick: close_menu, "Edit" }
+                div { class: "dropdown-container",
+                    button {
+                        class: "menu-item",
+                        onclick: move |_| {
+                            let current = open_menu.read().clone();
+                            open_menu.set(if current.as_deref() == Some("edit") { None } else { Some("edit".to_string()) });
+                        },
+                        "Edit"
+                    }
+                    if open_menu.read().as_deref() == Some("edit") {
+                        div { class: "dropdown-menu",
+                            button { class: "dropdown-item", onclick: move |_| { open_menu.set(None); /* Undo handled by Ctrl+Z */ },
+                                "Undo" span { class: "dropdown-item-shortcut", "Ctrl+Z" }
+                            }
+                            button { class: "dropdown-item", onclick: move |_| { open_menu.set(None); },
+                                "Redo" span { class: "dropdown-item-shortcut", "Ctrl+Y" }
+                            }
+                            div { class: "dropdown-divider" }
+                            button { class: "dropdown-item", onclick: move |_| { open_menu.set(None); show_find.set(true); show_replace.set(false); },
+                                "Find" span { class: "dropdown-item-shortcut", "Ctrl+F" }
+                            }
+                            button { class: "dropdown-item", onclick: move |_| { open_menu.set(None); show_find.set(true); show_replace.set(true); },
+                                "Find & Replace" span { class: "dropdown-item-shortcut", "Ctrl+H" }
+                            }
+                        }
+                    }
+                }
+
                 button { class: "menu-item", onclick: close_menu, "View" }
-                button { class: "menu-item", onclick: close_menu, "Insert" }
-                button { class: "menu-item", onclick: close_menu, "Format" }
+
+                // Insert menu
+                div { class: "dropdown-container",
+                    button {
+                        class: "menu-item",
+                        onclick: move |_| {
+                            let current = open_menu.read().clone();
+                            open_menu.set(if current.as_deref() == Some("insert") { None } else { Some("insert".to_string()) });
+                        },
+                        "Insert"
+                    }
+                    if open_menu.read().as_deref() == Some("insert") {
+                        div { class: "dropdown-menu",
+                            button { class: "dropdown-item", onclick: move |_| {
+                                open_menu.set(None);
+                                let val = content.read().clone();
+                                let cursor = crate::editor::get_cursor_position();
+                                let (new_text, new_pos) = toolbar::formatting::insert_link(&val, cursor);
+                                content.set(new_text);
+                                crate::editor::set_cursor_position(new_pos);
+                            }, "Link" span { class: "dropdown-item-shortcut", "Ctrl+K" } }
+                            button { class: "dropdown-item", onclick: move |_| {
+                                open_menu.set(None);
+                                let val = content.read().clone();
+                                let cursor = crate::editor::get_cursor_position();
+                                let insertion = "![alt text](image.png)";
+                                let mut result = String::with_capacity(val.len() + insertion.len());
+                                result.push_str(&val[..cursor]);
+                                result.push_str(insertion);
+                                result.push_str(&val[cursor..]);
+                                content.set(result);
+                                crate::editor::set_cursor_position(cursor + 2); // cursor on "alt text"
+                            }, "Image" }
+                            button { class: "dropdown-item", onclick: move |_| {
+                                open_menu.set(None);
+                                let val = content.read().clone();
+                                let cursor = crate::editor::get_cursor_position();
+                                // Insert footnote: [^N] at cursor + [^N]: text at end
+                                let n = val.matches("[^").count() + 1;
+                                let marker = format!("[^{n}]");
+                                let definition = format!("\n\n[^{n}]: Footnote text here");
+                                let mut result = String::with_capacity(val.len() + marker.len() + definition.len());
+                                result.push_str(&val[..cursor]);
+                                result.push_str(&marker);
+                                result.push_str(&val[cursor..]);
+                                result.push_str(&definition);
+                                content.set(result);
+                                crate::editor::set_cursor_position(cursor + marker.len());
+                            }, "Footnote" }
+                            div { class: "dropdown-divider" }
+                            button { class: "dropdown-item", onclick: move |_| {
+                                open_menu.set(None);
+                                let val = content.read().clone();
+                                let cursor = crate::editor::get_cursor_position();
+                                let (new_text, new_pos) = toolbar::formatting::insert_hr(&val, cursor);
+                                content.set(new_text);
+                                crate::editor::set_cursor_position(new_pos);
+                            }, "Horizontal Rule" }
+                            button { class: "dropdown-item", onclick: move |_| {
+                                open_menu.set(None);
+                                let val = content.read().clone();
+                                let cursor = crate::editor::get_cursor_position();
+                                let (new_text, new_pos) = toolbar::formatting::insert_page_break(&val, cursor);
+                                content.set(new_text);
+                                crate::editor::set_cursor_position(new_pos);
+                            }, "Page Break" }
+                            button { class: "dropdown-item", onclick: move |_| {
+                                open_menu.set(None);
+                                let val = content.read().clone();
+                                let cursor = crate::editor::get_cursor_position();
+                                let header = "{header:center:Document Title}";
+                                let mut result = String::with_capacity(val.len() + header.len() + 1);
+                                result.push_str(header);
+                                result.push('\n');
+                                result.push_str(&val);
+                                content.set(result);
+                                crate::editor::set_cursor_position(cursor + header.len() + 1);
+                            }, "Header" }
+                            button { class: "dropdown-item", onclick: move |_| {
+                                open_menu.set(None);
+                                let val = content.read().clone();
+                                let cursor = crate::editor::get_cursor_position();
+                                let footer = "{footer:right:Page}";
+                                let mut result = String::with_capacity(val.len() + footer.len() + 1);
+                                result.push_str(footer);
+                                result.push('\n');
+                                result.push_str(&val);
+                                content.set(result);
+                                crate::editor::set_cursor_position(cursor + footer.len() + 1);
+                            }, "Footer" }
+                        }
+                    }
+                }
+
+                // Format menu
+                div { class: "dropdown-container",
+                    button {
+                        class: "menu-item",
+                        onclick: move |_| {
+                            let current = open_menu.read().clone();
+                            open_menu.set(if current.as_deref() == Some("format") { None } else { Some("format".to_string()) });
+                        },
+                        "Format"
+                    }
+                    if open_menu.read().as_deref() == Some("format") {
+                        div { class: "dropdown-menu",
+                            button { class: "dropdown-item", onclick: move |_| { open_menu.set(None); },
+                                "Bold" span { class: "dropdown-item-shortcut", "Ctrl+B" }
+                            }
+                            button { class: "dropdown-item", onclick: move |_| { open_menu.set(None); },
+                                "Italic" span { class: "dropdown-item-shortcut", "Ctrl+I" }
+                            }
+                            button { class: "dropdown-item", onclick: move |_| { open_menu.set(None); },
+                                "Underline" span { class: "dropdown-item-shortcut", "Ctrl+U" }
+                            }
+                            div { class: "dropdown-divider" }
+                            button { class: "dropdown-item", onclick: move |_| {
+                                open_menu.set(None);
+                                let val = content.read().clone();
+                                let cursor = crate::editor::get_cursor_position();
+                                let (new_text, new_pos) = toolbar::formatting::toggle_alignment(&val, cursor, "center");
+                                content.set(new_text);
+                                crate::editor::set_cursor_position(new_pos);
+                            }, "Center" }
+                            button { class: "dropdown-item", onclick: move |_| {
+                                open_menu.set(None);
+                                let val = content.read().clone();
+                                let cursor = crate::editor::get_cursor_position();
+                                let (new_text, new_pos) = toolbar::formatting::toggle_alignment(&val, cursor, "right");
+                                content.set(new_text);
+                                crate::editor::set_cursor_position(new_pos);
+                            }, "Right Align" }
+                            button { class: "dropdown-item", onclick: move |_| {
+                                open_menu.set(None);
+                                let val = content.read().clone();
+                                let cursor = crate::editor::get_cursor_position();
+                                let (new_text, new_pos) = toolbar::formatting::toggle_alignment(&val, cursor, "justify");
+                                content.set(new_text);
+                                crate::editor::set_cursor_position(new_pos);
+                            }, "Justify" }
+                        }
+                    }
+                }
+
                 button { class: "menu-item", onclick: close_menu, "Styles" }
                 button { class: "menu-item", onclick: close_menu, "Table" }
                 button { class: "menu-item", onclick: close_menu, "Tools" }
