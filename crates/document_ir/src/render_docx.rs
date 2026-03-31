@@ -55,6 +55,28 @@ pub fn render_to_docx(doc: &ir::Document, style: &DocStyle) -> Result<Vec<u8>, S
         .add_numbering(Numbering::new(1, 1))
         .add_numbering(Numbering::new(2, 2));
 
+    // Header
+    if let Some(ref hdr) = doc.header {
+        let mut hdr_para = Paragraph::new()
+            .align(to_docx_align(hdr.alignment));
+        for run in &hdr.runs {
+            hdr_para = hdr_para.add_run(make_run(run, style, style.body_size_half_pts()));
+        }
+        let header = Header::new().add_paragraph(hdr_para);
+        docx = docx.header(header);
+    }
+
+    // Footer
+    if let Some(ref ftr) = doc.footer {
+        let mut ftr_para = Paragraph::new()
+            .align(to_docx_align(ftr.alignment));
+        for run in &ftr.runs {
+            ftr_para = ftr_para.add_run(make_run(run, style, style.body_size_half_pts()));
+        }
+        let footer = Footer::new().add_paragraph(ftr_para);
+        docx = docx.footer(footer);
+    }
+
     // Render blocks
     render_blocks(&doc.children, &mut docx, style, 0);
 
@@ -126,13 +148,17 @@ fn render_blocks(blocks: &[ir::Block], docx: &mut Docx, style: &DocStyle, list_d
                 // Header row
                 let mut header_cells = Vec::new();
                 for cell in &table.header {
-                    let mut para = Paragraph::new();
+                    let mut para = Paragraph::new()
+                        .align(to_docx_align(cell.alignment));
                     for run in &cell.runs {
                         para = para.add_run(make_run(run, style, style.body_size_half_pts()).bold());
                     }
-                    let tc = TableCell::new()
+                    let mut tc = TableCell::new()
                         .add_paragraph(para)
                         .shading(Shading::new().fill("e8e8e8"));
+                    if cell.col_span > 1 {
+                        tc = tc.grid_span(cell.col_span as usize);
+                    }
                     header_cells.push(tc);
                 }
                 rows.push(TableRow::new(header_cells));
@@ -141,11 +167,16 @@ fn render_blocks(blocks: &[ir::Block], docx: &mut Docx, style: &DocStyle, list_d
                 for row in &table.rows {
                     let mut cells = Vec::new();
                     for cell in row {
-                        let mut para = Paragraph::new();
+                        let mut para = Paragraph::new()
+                            .align(to_docx_align(cell.alignment));
                         for run in &cell.runs {
                             para = para.add_run(make_run(run, style, style.body_size_half_pts()));
                         }
-                        cells.push(TableCell::new().add_paragraph(para));
+                        let mut tc = TableCell::new().add_paragraph(para);
+                        if cell.col_span > 1 {
+                            tc = tc.grid_span(cell.col_span as usize);
+                        }
+                        cells.push(tc);
                     }
                     rows.push(TableRow::new(cells));
                 }
@@ -188,6 +219,20 @@ fn render_blocks(blocks: &[ir::Block], docx: &mut Docx, style: &DocStyle, list_d
                         render_blocks(std::slice::from_ref(b), docx, style, list_depth);
                     }
                 }
+            }
+            ir::Block::Image(img) => {
+                // Images from URLs/paths — for DOCX we need the actual bytes.
+                // If the src is a data URL or local file, we could embed it.
+                // For now, add a placeholder paragraph with the alt text as a link.
+                let alt = if img.alt.is_empty() { "[image]" } else { &img.alt };
+                let mut run = Run::new()
+                    .add_text(alt)
+                    .size(style.body_size_half_pts())
+                    .fonts(font(&style.body_font))
+                    .color("0563C1")
+                    .underline("single");
+                let para = Paragraph::new().add_run(run);
+                *docx = std::mem::take(docx).add_paragraph(para);
             }
             ir::Block::ThematicBreak => {
                 *docx = std::mem::take(docx).add_paragraph(Paragraph::new());

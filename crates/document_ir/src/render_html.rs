@@ -3,6 +3,21 @@ use shared::DocStyle;
 
 /// Render a Document IR to HTML, respecting the given document style.
 pub fn render_to_html(doc: &Document, style: &DocStyle) -> String {
+    let mut result = String::new();
+
+    // Header
+    if let Some(ref hdr) = doc.header {
+        let align = if hdr.alignment != Alignment::Left {
+            format!(r#" style="text-align:{}""#, hdr.alignment.css_value())
+        } else {
+            String::new()
+        };
+        result.push_str(&format!(r#"<div class="doc-header"{align}>"#));
+        render_runs(&hdr.runs, &mut result);
+        result.push_str("</div>\n");
+    }
+
+    // Body — split at page breaks
     let mut pages: Vec<String> = Vec::new();
     let mut current_page = String::new();
 
@@ -17,10 +32,24 @@ pub fn render_to_html(doc: &Document, style: &DocStyle) -> String {
     pages.push(current_page);
 
     if pages.len() == 1 {
-        pages.into_iter().next().unwrap()
+        result.push_str(&pages.into_iter().next().unwrap());
     } else {
-        pages.join(r#"<div class="page-break"></div>"#)
+        result.push_str(&pages.join(r#"<div class="page-break"></div>"#));
     }
+
+    // Footer
+    if let Some(ref ftr) = doc.footer {
+        let align = if ftr.alignment != Alignment::Left {
+            format!(r#" style="text-align:{}""#, ftr.alignment.css_value())
+        } else {
+            String::new()
+        };
+        result.push_str(&format!(r#"<div class="doc-footer"{align}>"#));
+        render_runs(&ftr.runs, &mut result);
+        result.push_str("</div>\n");
+    }
+
+    result
 }
 
 fn render_block(block: &Block, out: &mut String, style: &DocStyle) {
@@ -58,7 +87,9 @@ fn render_block(block: &Block, out: &mut String, style: &DocStyle) {
         Block::Table(table) => {
             out.push_str("<table>\n<thead>\n<tr>\n");
             for cell in &table.header {
-                out.push_str("<th>");
+                let align = cell_align_attr(cell);
+                let span = if cell.col_span > 1 { format!(r#" colspan="{}""#, cell.col_span) } else { String::new() };
+                out.push_str(&format!("<th{align}{span}>"));
                 render_runs(&cell.runs, out);
                 out.push_str("</th>\n");
             }
@@ -66,7 +97,9 @@ fn render_block(block: &Block, out: &mut String, style: &DocStyle) {
             for row in &table.rows {
                 out.push_str("<tr>\n");
                 for cell in row {
-                    out.push_str("<td>");
+                    let align = cell_align_attr(cell);
+                    let span = if cell.col_span > 1 { format!(r#" colspan="{}""#, cell.col_span) } else { String::new() };
+                    out.push_str(&format!("<td{align}{span}>"));
                     render_runs(&cell.runs, out);
                     out.push_str("</td>\n");
                 }
@@ -91,6 +124,23 @@ fn render_block(block: &Block, out: &mut String, style: &DocStyle) {
                 render_block(b, out, style);
             }
             out.push_str("</blockquote>\n");
+        }
+        Block::Image(img) => {
+            let alt = html_escape(&img.alt);
+            let src = html_escape(&img.src);
+            let title = if img.title.is_empty() {
+                String::new()
+            } else {
+                format!(r#" title="{}""#, html_escape(&img.title))
+            };
+            let size = if img.width_px > 0 && img.height_px > 0 {
+                format!(r#" width="{}" height="{}""#, img.width_px, img.height_px)
+            } else if img.width_px > 0 {
+                format!(r#" width="{}""#, img.width_px)
+            } else {
+                String::new()
+            };
+            out.push_str(&format!(r#"<p><img src="{src}" alt="{alt}"{title}{size}></p>{}"#, "\n"));
         }
         Block::ThematicBreak => {
             out.push_str("<hr>\n");
@@ -136,6 +186,14 @@ fn render_runs(runs: &[Run], out: &mut String) {
         for tag in open_tags.into_iter().rev() {
             out.push_str(&format!("</{tag}>"));
         }
+    }
+}
+
+fn cell_align_attr(cell: &TableCell) -> String {
+    if cell.alignment == Alignment::Left {
+        String::new()
+    } else {
+        format!(r#" style="text-align:{}""#, cell.alignment.css_value())
     }
 }
 
@@ -246,5 +304,46 @@ mod tests {
     fn thematic_break() {
         let html = render("---");
         assert!(html.contains("<hr>"));
+    }
+
+    #[test]
+    fn header_renders() {
+        let html = render("{header:My Header}\n\n# Body");
+        assert!(html.contains(r#"<div class="doc-header">"#));
+        assert!(html.contains("My Header"));
+    }
+
+    #[test]
+    fn centered_header_renders() {
+        let html = render("{header:center:Centered}\n\nBody");
+        assert!(html.contains(r#"style="text-align:center""#));
+        assert!(html.contains("Centered"));
+    }
+
+    #[test]
+    fn footer_renders() {
+        let html = render("{footer:Page 1}\n\nBody");
+        assert!(html.contains(r#"<div class="doc-footer">"#));
+        assert!(html.contains("Page 1"));
+    }
+
+    #[test]
+    fn image_renders() {
+        let html = render("![alt](pic.png)");
+        assert!(html.contains(r#"<img src="pic.png" alt="alt""#));
+    }
+
+    #[test]
+    fn image_with_title() {
+        let html = render("![photo](img.jpg \"My Photo\")");
+        assert!(html.contains(r#"title="My Photo""#));
+    }
+
+    #[test]
+    fn table_column_alignment_html() {
+        let md = "| L | C | R |\n|:--|:-:|--:|\n| a | b | c |";
+        let html = render(md);
+        assert!(html.contains(r#"style="text-align:center""#));
+        assert!(html.contains(r#"style="text-align:right""#));
     }
 }

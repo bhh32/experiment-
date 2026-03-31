@@ -14,38 +14,78 @@ fn gfm_options() -> Options<'static> {
     opts
 }
 
-/// Parse markdown (with our custom alignment/pagebreak extensions) into a Document IR.
+/// Parse markdown (with our custom alignment/pagebreak/header/footer extensions) into a Document IR.
 pub fn parse_markdown(markdown: &str) -> Document {
-    // First pass: strip our custom prefixes, track alignment per line
     let preprocessed = preprocess(markdown);
 
-    // Second pass: parse clean markdown with comrak
     let arena = Arena::new();
     let root = parse_document(&arena, &preprocessed.clean_md, &gfm_options());
 
-    // Third pass: walk AST and build IR
     let mut blocks = Vec::new();
     convert_children(root, &mut blocks, &preprocessed);
 
-    Document { children: blocks }
+    Document {
+        children: blocks,
+        header: preprocessed.header,
+        footer: preprocessed.footer,
+    }
 }
 
 struct Preprocessed {
     clean_md: String,
-    /// (stripped_text_content, alignment) for lines with alignment prefixes
     line_alignments: Vec<(String, Alignment)>,
-    /// Text content of paragraphs that should have a page break before them
     page_break_before: Vec<String>,
+    header: Option<HeaderFooter>,
+    footer: Option<HeaderFooter>,
+}
+
+/// Parse `{header:text}` or `{header:center:text}` syntax.
+fn parse_header_footer(line: &str) -> Option<(&str, HeaderFooter)> {
+    let trimmed = line.trim();
+    for kind in &["header", "footer"] {
+        let prefix = format!("{{{kind}:");
+        if let Some(rest) = trimmed.strip_prefix(&prefix) {
+            if let Some(content) = rest.strip_suffix('}') {
+                // Check for alignment: {header:center:text}
+                let (alignment, text) = if let Some(after_center) = content.strip_prefix("center:") {
+                    (Alignment::Center, after_center)
+                } else if let Some(after_right) = content.strip_prefix("right:") {
+                    (Alignment::Right, after_right)
+                } else if let Some(after_left) = content.strip_prefix("left:") {
+                    (Alignment::Left, after_left)
+                } else {
+                    (Alignment::Left, content)
+                };
+                return Some((kind, HeaderFooter {
+                    runs: vec![Run::text(text.to_string())],
+                    alignment,
+                }));
+            }
+        }
+    }
+    None
 }
 
 fn preprocess(markdown: &str) -> Preprocessed {
     let mut clean_lines = Vec::new();
     let mut line_alignments = Vec::new();
     let mut page_break_before = Vec::new();
+    let mut header = None;
+    let mut footer = None;
     let mut consecutive_blanks = 0;
     let mut next_has_page_break = false;
 
     for line in markdown.lines() {
+        // Header/footer directives
+        if let Some((kind, hf)) = parse_header_footer(line) {
+            match kind {
+                "header" => header = Some(hf),
+                "footer" => footer = Some(hf),
+                _ => {}
+            }
+            continue;
+        }
+
         if line.trim() == "{pagebreak}" {
             next_has_page_break = true;
             clean_lines.push(String::new());
@@ -58,7 +98,6 @@ fn preprocess(markdown: &str) -> Preprocessed {
         if text.trim().is_empty() {
             consecutive_blanks += 1;
             if consecutive_blanks > 1 {
-                // Extra blank lines become NBSP paragraphs for visible spacing
                 clean_lines.push("\u{00a0}".to_string());
             } else {
                 clean_lines.push(String::new());
@@ -89,6 +128,8 @@ fn preprocess(markdown: &str) -> Preprocessed {
         clean_md: clean_lines.join("\n"),
         line_alignments,
         page_break_before,
+        header,
+        footer,
     }
 }
 
@@ -125,6 +166,28 @@ fn extract_text<'a>(node: &'a comrak::nodes::AstNode<'a>) -> String {
         }
     }
     text
+}
+
+/// Check if a paragraph contains only a single Image child; if so, extract it.
+fn extract_standalone_image<'a>(node: &'a comrak::nodes::AstNode<'a>) -> Option<Image> {
+    let children: Vec<_> = node.children().collect();
+    if children.len() == 1 {
+        let ast = children[0].data.borrow();
+        if let NodeValue::Image(ref link) = ast.value {
+            let src = link.url.clone();
+            let title = link.title.clone();
+            drop(ast);
+            let alt = extract_text(children[0]);
+            return Some(Image {
+                src,
+                alt,
+                title,
+                width_px: 0,
+                height_px: 0,
+            });
+        }
+    }
+    None
 }
 
 /// Collect inline runs from an AST node.
@@ -203,6 +266,13 @@ fn convert_children<'a>(
         match &ast.value {
             NodeValue::Paragraph => {
                 drop(ast);
+
+                // Check if this paragraph is a standalone image
+                if let Some(image) = extract_standalone_image(child) {
+                    blocks.push(Block::Image(image));
+                    continue;
+                }
+
                 let text = extract_text(child);
                 let alignment = lookup_alignment(&text, pre);
 
@@ -305,7 +375,18 @@ fn convert_children<'a>(
             NodeValue::ThematicBreak => {
                 blocks.push(Block::ThematicBreak);
             }
-            NodeValue::Table(_) => {
+            NodeValue::Table(table_node) => {
+                // Extract column alignments from GFM syntax
+                use comrak::nodes::TableAlignment;
+                let col_alignments: Vec<Alignment> = table_node.alignments.iter().map(|a| {
+                    match a {
+                        TableAlignment::Center => Alignment::Center,
+                        TableAlignment::Left => Alignment::Left,
+                        TableAlignment::Right => Alignment::Right,
+                        _ => Alignment::Left,
+                    }
+                }).collect();
+
                 drop(ast);
                 let mut header = Vec::new();
                 let mut rows = Vec::new();
@@ -317,12 +398,14 @@ fn convert_children<'a>(
                     drop(row_ast);
 
                     let mut cells = Vec::new();
-                    for cell_node in row_node.children() {
+                    for (col_idx, cell_node) in row_node.children().enumerate() {
                         let runs = collect_runs(cell_node);
+                        let col_align = col_alignments.get(col_idx).copied().unwrap_or(Alignment::Left);
                         cells.push(TableCell {
                             runs,
-                            alignment: Alignment::Left,
+                            alignment: col_align,
                             is_header: is_header_row || is_first_row,
+                            col_span: 1,
                         });
                     }
 
@@ -334,7 +417,14 @@ fn convert_children<'a>(
                     }
                 }
 
-                blocks.push(Block::Table(Table { header, rows }));
+                blocks.push(Block::Table(Table {
+                    header,
+                    rows,
+                    properties: TableProperties {
+                        width_pct: 100,
+                        column_alignments: col_alignments,
+                    },
+                }));
             }
             _ => {
                 drop(ast);
@@ -481,5 +571,74 @@ mod tests {
             Block::Paragraph(p) => assert_eq!(p.properties.alignment, Alignment::Right),
             _ => panic!("expected paragraph"),
         }
+    }
+
+    #[test]
+    fn parses_header() {
+        let doc = parse_markdown("{header:My Document Title}\n\n# Body");
+        assert!(doc.header.is_some());
+        assert_eq!(doc.header.as_ref().unwrap().runs[0].text, "My Document Title");
+    }
+
+    #[test]
+    fn parses_centered_header() {
+        let doc = parse_markdown("{header:center:Centered Header}\n\nBody text");
+        let hdr = doc.header.as_ref().unwrap();
+        assert_eq!(hdr.alignment, Alignment::Center);
+        assert_eq!(hdr.runs[0].text, "Centered Header");
+    }
+
+    #[test]
+    fn parses_footer() {
+        let doc = parse_markdown("{footer:Page Footer}\n\nBody text");
+        assert!(doc.footer.is_some());
+        assert_eq!(doc.footer.as_ref().unwrap().runs[0].text, "Page Footer");
+    }
+
+    #[test]
+    fn parses_right_footer() {
+        let doc = parse_markdown("{footer:right:Page 1}\n\nBody");
+        let ftr = doc.footer.as_ref().unwrap();
+        assert_eq!(ftr.alignment, Alignment::Right);
+    }
+
+    #[test]
+    fn parses_image() {
+        let doc = parse_markdown("![alt text](image.png \"title\")");
+        match &doc.children[0] {
+            Block::Image(img) => {
+                assert_eq!(img.src, "image.png");
+                assert_eq!(img.alt, "alt text");
+                assert_eq!(img.title, "title");
+            }
+            _ => panic!("expected image"),
+        }
+    }
+
+    #[test]
+    fn parses_table_column_alignments() {
+        let md = "| Left | Center | Right |\n|:-----|:------:|------:|\n| a | b | c |";
+        let doc = parse_markdown(md);
+        match &doc.children[0] {
+            Block::Table(t) => {
+                assert_eq!(t.properties.column_alignments.len(), 3);
+                assert_eq!(t.properties.column_alignments[0], Alignment::Left);
+                assert_eq!(t.properties.column_alignments[1], Alignment::Center);
+                assert_eq!(t.properties.column_alignments[2], Alignment::Right);
+                // Cell alignment should match column alignment
+                assert_eq!(t.header[1].alignment, Alignment::Center);
+                assert_eq!(t.rows[0][2].alignment, Alignment::Right);
+            }
+            _ => panic!("expected table"),
+        }
+    }
+
+    #[test]
+    fn header_and_footer_together() {
+        let doc = parse_markdown("{header:center:Report}\n{footer:right:Confidential}\n\n# Body");
+        assert!(doc.header.is_some());
+        assert!(doc.footer.is_some());
+        assert_eq!(doc.header.as_ref().unwrap().alignment, Alignment::Center);
+        assert_eq!(doc.footer.as_ref().unwrap().alignment, Alignment::Right);
     }
 }

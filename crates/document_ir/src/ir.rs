@@ -4,6 +4,15 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Document {
     pub children: Vec<Block>,
+    pub header: Option<HeaderFooter>,
+    pub footer: Option<HeaderFooter>,
+}
+
+/// Header or footer content — analogous to w:hdr / w:ftr.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct HeaderFooter {
+    pub runs: Vec<Run>,
+    pub alignment: Alignment,
 }
 
 /// Block-level elements — analogous to w:p, w:tbl, w:sectPr.
@@ -15,6 +24,7 @@ pub enum Block {
     Table(Table),
     CodeBlock(CodeBlock),
     BlockQuote(Vec<Block>),
+    Image(Image),
     ThematicBreak,
     PageBreak,
 }
@@ -101,19 +111,27 @@ pub struct List {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ListItem {
-    /// Inline content of this list item
     pub runs: Vec<Run>,
-    /// Nested blocks (sub-lists, paragraphs within a list item)
     pub children: Vec<Block>,
     /// Task list checkbox state: None = not a task, Some(true) = checked
     pub checked: Option<bool>,
 }
 
-/// A table — analogous to w:tbl.
+/// A table — analogous to w:tbl with w:tblPr.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Table {
     pub header: Vec<TableCell>,
     pub rows: Vec<Vec<TableCell>>,
+    pub properties: TableProperties,
+}
+
+/// Table-level properties — analogous to w:tblPr.
+#[derive(Debug, Clone, Default, Serialize, Deserialize)]
+pub struct TableProperties {
+    /// Table width in percentage (0-100) or 0 for auto
+    pub width_pct: u32,
+    /// Column alignment overrides from GFM table alignment syntax
+    pub column_alignments: Vec<Alignment>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -121,6 +139,8 @@ pub struct TableCell {
     pub runs: Vec<Run>,
     pub alignment: Alignment,
     pub is_header: bool,
+    /// Number of columns this cell spans (1 = normal)
+    pub col_span: u32,
 }
 
 /// A fenced code block — maps to w:p with monospace font.
@@ -130,7 +150,21 @@ pub struct CodeBlock {
     pub content: String,
 }
 
-/// A line break within a run (from hardbreaks).
+/// An image — analogous to w:drawing/wp:inline/a:graphic.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Image {
+    /// URL or path to the image
+    pub src: String,
+    /// Alt text
+    pub alt: String,
+    /// Optional title
+    pub title: String,
+    /// Width in pixels (0 = auto)
+    pub width_px: u32,
+    /// Height in pixels (0 = auto)
+    pub height_px: u32,
+}
+
 impl Run {
     pub fn text(s: impl Into<String>) -> Self {
         Self {
@@ -172,6 +206,17 @@ impl Run {
     }
 }
 
+impl TableCell {
+    pub fn new(runs: Vec<Run>, is_header: bool) -> Self {
+        Self {
+            runs,
+            alignment: Alignment::Left,
+            is_header,
+            col_span: 1,
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -200,5 +245,12 @@ mod tests {
             properties: ParaProperties::default(),
         };
         assert_eq!(p.properties.alignment, Alignment::Left);
+    }
+
+    #[test]
+    fn table_cell_default() {
+        let cell = TableCell::new(vec![Run::text("data")], false);
+        assert_eq!(cell.col_span, 1);
+        assert!(!cell.is_header);
     }
 }

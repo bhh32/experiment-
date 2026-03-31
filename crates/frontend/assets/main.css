@@ -246,6 +246,23 @@ body {
     line-height: 1.6;
 }
 
+/* Document header/footer */
+.doc-header {
+    font-size: 9pt;
+    color: #666;
+    border-bottom: 1px solid #ccc;
+    padding-bottom: 4pt;
+    margin-bottom: 12pt;
+}
+
+.doc-footer {
+    font-size: 9pt;
+    color: #666;
+    border-top: 1px solid #ccc;
+    padding-top: 4pt;
+    margin-top: 12pt;
+}
+
 .preview-content h1 { font-size: 26pt; font-weight: bold; margin: 12pt 0 6pt 0; line-height: 1.15; color: #000; }
 .preview-content h2 { font-size: 20pt; font-weight: bold; margin: 12pt 0 6pt 0; line-height: 1.15; color: #000; }
 .preview-content h3 { font-size: 14pt; font-weight: normal; margin: 12pt 0 6pt 0; line-height: 1.15; color: #000; }
