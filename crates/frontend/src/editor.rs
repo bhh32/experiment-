@@ -365,26 +365,6 @@ pub fn EditorView() -> Element {
                         class: if *show_preview.read() { "editor-pane" } else { "editor-pane editor-pane-full" },
                         div { class: "editor-pane-header",
                             span { "Source" }
-                            div { class: "pane-header-actions",
-                                button {
-                                    class: "pane-toggle-btn",
-                                    title: if *show_preview.read() { "Hide Preview" } else { "Show Preview" },
-                                    onclick: move |_| {
-                                        let current = *show_preview.read();
-                                        show_preview.set(!current);
-                                    },
-                                    if *show_preview.read() { "◧" } else { "◨" }
-                                }
-                                button {
-                                    class: "pane-toggle-btn",
-                                    title: if *show_sidebar.read() { "Hide Sidebar" } else { "Show Sidebar" },
-                                    onclick: move |_| {
-                                        let current = *show_sidebar.read();
-                                        show_sidebar.set(!current);
-                                    },
-                                    if *show_sidebar.read() { "⊟" } else { "⊞" }
-                                }
-                            }
                         }
                         textarea {
                             id: "editor-textarea",
@@ -397,7 +377,18 @@ pub fn EditorView() -> Element {
                         }
                     }
 
-                    // Document preview (collapsible drawer)
+                    // Preview toggle on the border
+                    button {
+                        class: "border-toggle preview-border-toggle",
+                        title: if *show_preview.read() { "Hide Preview" } else { "Show Preview" },
+                        onclick: move |_| {
+                            let current = *show_preview.read();
+                            show_preview.set(!current);
+                        },
+                        if *show_preview.read() { "›" } else { "‹" }
+                    }
+
+                    // Document preview (collapsible)
                     if *show_preview.read() {
                         div { class: "preview-pane",
                             div { class: "preview-pane-header",
@@ -431,6 +422,17 @@ pub fn EditorView() -> Element {
                             }
                         }
                     }
+                }
+
+                // Sidebar toggle on the border
+                button {
+                    class: "border-toggle sidebar-border-toggle",
+                    title: if *show_sidebar.read() { "Hide Sidebar" } else { "Show Sidebar" },
+                    onclick: move |_| {
+                        let current = *show_sidebar.read();
+                        show_sidebar.set(!current);
+                    },
+                    if *show_sidebar.read() { "›" } else { "‹" }
                 }
 
                 // Styles/Properties sidebar (collapsible)

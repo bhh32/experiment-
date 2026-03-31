@@ -165,6 +165,19 @@ body {
     overflow: hidden;
 }
 
+/* When editor is full-width, center the editing area with a background */
+.editor-pane-full {
+    background: #fafafa;
+}
+
+.editor-pane-full .editor-textarea {
+    max-width: 900px;
+    margin: 0 auto;
+    border-left: 1px solid #e0e0e0;
+    border-right: 1px solid #e0e0e0;
+    background: #fff;
+}
+
 .editor-pane {
     width: 50%;
     display: flex;
@@ -177,6 +190,8 @@ body {
 .editor-pane-full {
     width: 100%;
     border-right: none;
+    max-width: 900px;
+    margin: 0 auto;
 }
 
 .editor-pane-header {
@@ -193,24 +208,26 @@ body {
     letter-spacing: 0.5px;
 }
 
-.pane-header-actions {
-    display: flex;
-    gap: 2px;
-}
-
-.pane-toggle-btn {
-    background: none;
-    border: 1px solid transparent;
+/* Border toggle buttons (centered vertically on pane borders) */
+.border-toggle {
+    width: 16px;
+    background: #e8e8e8;
+    border: none;
+    border-left: 1px solid #ccc;
+    border-right: 1px solid #ccc;
     cursor: pointer;
     font-size: 14px;
     color: #888;
-    padding: 0 4px;
-    border-radius: 2px;
-    line-height: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    padding: 0;
+    transition: background 0.15s;
 }
 
-.pane-toggle-btn:hover {
-    background: #ddd;
+.border-toggle:hover {
+    background: #d0d0d0;
     color: #333;
 }
 
