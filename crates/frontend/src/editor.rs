@@ -11,9 +11,9 @@ pub fn EditorView() -> Element {
     let mut file_path = use_signal(|| Option::<String>::None);
     let mut status_msg = use_signal(|| String::new());
     let mut preview_mode = use_signal(|| "markdown".to_string());
-    let mut font_family = use_signal(|| "Calibri".to_string());
-    let mut font_size = use_signal(|| 11.0f32);
-    let mut line_height = use_signal(|| 1.15f32);
+    let mut font_family = use_signal(|| "Times New Roman".to_string());
+    let mut font_size = use_signal(|| 12.0f32);
+    let mut line_height = use_signal(|| 2.0f32);
 
     // Word and character counts
     let word_count = use_memo(move || {

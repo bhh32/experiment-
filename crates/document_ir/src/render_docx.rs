@@ -55,6 +55,20 @@ pub fn render_to_docx(doc: &ir::Document, style: &DocStyle) -> Result<Vec<u8>, S
         .add_numbering(Numbering::new(1, 1))
         .add_numbering(Numbering::new(2, 2));
 
+    // Page layout: US Letter with 1" margins
+    let margin = style.margin_twips();
+    docx = docx
+        .page_size(style.page_width_twips(), style.page_height_twips())
+        .page_margin(
+            PageMargin::new()
+                .top(margin)
+                .bottom(margin)
+                .left(margin)
+                .right(margin)
+                .header(720)  // 0.5" header margin
+                .footer(720)  // 0.5" footer margin
+        );
+
     // Header
     if let Some(ref hdr) = doc.header {
         let mut hdr_para = Paragraph::new()
@@ -90,6 +104,9 @@ pub fn render_to_docx(doc: &ir::Document, style: &DocStyle) -> Result<Vec<u8>, S
 
 fn render_blocks(blocks: &[ir::Block], docx: &mut Docx, style: &DocStyle, list_depth: usize) {
     let mut page_break_next = false;
+    let ls = LineSpacing::new()
+        .line(style.line_spacing_twips())
+        .line_rule(LineSpacingType::Auto);
 
     for block in blocks {
         match block {
@@ -97,8 +114,9 @@ fn render_blocks(blocks: &[ir::Block], docx: &mut Docx, style: &DocStyle, list_d
                 page_break_next = true;
             }
             ir::Block::Paragraph(p) => {
-                let mut para = Paragraph::new();
-                para = para.align(to_docx_align(p.properties.alignment));
+                let mut para = Paragraph::new()
+                    .align(to_docx_align(p.properties.alignment))
+                    .line_spacing(ls.clone());
 
                 if page_break_next {
                     para = para.page_break_before(true);
@@ -121,7 +139,8 @@ fn render_blocks(blocks: &[ir::Block], docx: &mut Docx, style: &DocStyle, list_d
 
                 let mut para = Paragraph::new()
                     .style(style_name)
-                    .align(to_docx_align(h.properties.alignment));
+                    .align(to_docx_align(h.properties.alignment))
+                    .line_spacing(ls.clone());
 
                 if page_break_next {
                     para = para.page_break_before(true);
