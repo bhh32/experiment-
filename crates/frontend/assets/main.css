@@ -237,9 +237,10 @@ body {
 /* Document page rendering */
 .preview-scroll-area {
     flex: 1;
-    overflow-y: auto;
+    overflow: auto;
     background: #808080;
     padding: 20px;
+    min-width: 0;
 }
 
 .preview-content {
