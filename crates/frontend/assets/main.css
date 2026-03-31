@@ -171,11 +171,18 @@ body {
     flex-direction: column;
     border-right: 1px solid #ccc;
     background: #fafafa;
+    transition: width 0.2s ease;
+}
+
+.editor-pane-full {
+    width: 100%;
+    border-right: none;
 }
 
 .editor-pane-header {
     display: flex;
     align-items: center;
+    justify-content: space-between;
     padding: 4px 12px;
     background: #f0f0f0;
     border-bottom: 1px solid #ddd;
@@ -184,6 +191,27 @@ body {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.5px;
+}
+
+.pane-header-actions {
+    display: flex;
+    gap: 2px;
+}
+
+.pane-toggle-btn {
+    background: none;
+    border: 1px solid transparent;
+    cursor: pointer;
+    font-size: 14px;
+    color: #888;
+    padding: 0 4px;
+    border-radius: 2px;
+    line-height: 1;
+}
+
+.pane-toggle-btn:hover {
+    background: #ddd;
+    color: #333;
 }
 
 .editor-textarea {
@@ -397,6 +425,34 @@ body {
 .style-item-size {
     font-size: 10px;
     color: #999;
+}
+
+/* Properties panel */
+.properties-list {
+    padding: 4px 8px;
+}
+
+.prop-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 4px 4px;
+    font-size: 11px;
+    border-bottom: 1px solid #eee;
+}
+
+.prop-row:last-child {
+    border-bottom: none;
+}
+
+.prop-label {
+    color: #666;
+    font-weight: 500;
+}
+
+.prop-value {
+    color: #333;
+    text-align: right;
 }
 
 /* ─── Status Bar ─── */

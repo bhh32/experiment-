@@ -20,6 +20,8 @@ pub fn EditorView() -> Element {
     let history = use_signal(|| Rc::new(RefCell::new(History::new())));
     let mut show_find = use_signal(|| false);
     let mut show_replace = use_signal(|| false);
+    let mut show_preview = use_signal(|| true);
+    let mut show_sidebar = use_signal(|| true);
 
     // Word and character counts
     let word_count = use_memo(move || {
@@ -359,8 +361,31 @@ pub fn EditorView() -> Element {
             div { class: "main-layout",
                 div { class: "editor-preview-area",
                     // Markdown source editor
-                    div { class: "editor-pane",
-                        div { class: "editor-pane-header", "Source" }
+                    div {
+                        class: if *show_preview.read() { "editor-pane" } else { "editor-pane editor-pane-full" },
+                        div { class: "editor-pane-header",
+                            span { "Source" }
+                            div { class: "pane-header-actions",
+                                button {
+                                    class: "pane-toggle-btn",
+                                    title: if *show_preview.read() { "Hide Preview" } else { "Show Preview" },
+                                    onclick: move |_| {
+                                        let current = *show_preview.read();
+                                        show_preview.set(!current);
+                                    },
+                                    if *show_preview.read() { "◧" } else { "◨" }
+                                }
+                                button {
+                                    class: "pane-toggle-btn",
+                                    title: if *show_sidebar.read() { "Hide Sidebar" } else { "Show Sidebar" },
+                                    onclick: move |_| {
+                                        let current = *show_sidebar.read();
+                                        show_sidebar.set(!current);
+                                    },
+                                    if *show_sidebar.read() { "⊟" } else { "⊞" }
+                                }
+                            }
+                        }
                         textarea {
                             id: "editor-textarea",
                             class: "editor-textarea",
@@ -372,43 +397,52 @@ pub fn EditorView() -> Element {
                         }
                     }
 
-                    // Document preview
-                    div { class: "preview-pane",
-                        div { class: "preview-pane-header",
-                            span { class: "preview-pane-label", "Preview" }
-                            div { class: "preview-mode-toggle",
-                                button {
-                                    class: if *preview_mode.read() == "markdown" { "mode-btn active" } else { "mode-btn" },
-                                    onclick: move |_| preview_mode.set("markdown".to_string()),
-                                    "Print"
-                                }
-                                button {
-                                    class: if *preview_mode.read() == "docx" { "mode-btn active" } else { "mode-btn" },
-                                    onclick: move |_| preview_mode.set("docx".to_string()),
-                                    "DOCX"
-                                }
-                                button {
-                                    class: if *preview_mode.read() == "odt" { "mode-btn active" } else { "mode-btn" },
-                                    onclick: move |_| preview_mode.set("odt".to_string()),
-                                    "ODF"
+                    // Document preview (collapsible drawer)
+                    if *show_preview.read() {
+                        div { class: "preview-pane",
+                            div { class: "preview-pane-header",
+                                span { class: "preview-pane-label", "Preview" }
+                                div { class: "preview-mode-toggle",
+                                    button {
+                                        class: if *preview_mode.read() == "markdown" { "mode-btn active" } else { "mode-btn" },
+                                        onclick: move |_| preview_mode.set("markdown".to_string()),
+                                        "Print"
+                                    }
+                                    button {
+                                        class: if *preview_mode.read() == "docx" { "mode-btn active" } else { "mode-btn" },
+                                        onclick: move |_| preview_mode.set("docx".to_string()),
+                                        "DOCX"
+                                    }
+                                    button {
+                                        class: if *preview_mode.read() == "odt" { "mode-btn active" } else { "mode-btn" },
+                                        onclick: move |_| preview_mode.set("odt".to_string()),
+                                        "ODF"
+                                    }
                                 }
                             }
-                        }
-                        div { class: "preview-scroll-area",
-                            PreviewPane {
-                                content: content,
-                                mode: preview_mode,
-                                font_family: font_family,
-                                font_size: font_size,
-                                line_height: line_height,
+                            div { class: "preview-scroll-area",
+                                PreviewPane {
+                                    content: content,
+                                    mode: preview_mode,
+                                    font_family: font_family,
+                                    font_size: font_size,
+                                    line_height: line_height,
+                                }
                             }
                         }
                     }
                 }
 
-                // Styles sidebar
-                StylesSidebar {
-                    content: content,
+                // Styles/Properties sidebar (collapsible)
+                if *show_sidebar.read() {
+                    div { class: "styles-sidebar",
+                        StylesSidebar {
+                            content: content,
+                            font_family: font_family,
+                            font_size: font_size,
+                            line_height: line_height,
+                        }
+                    }
                 }
             }
 
