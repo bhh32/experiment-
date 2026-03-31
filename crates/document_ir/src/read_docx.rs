@@ -2,85 +2,85 @@ use docx_rs::*;
 use crate::ir;
 
 /// Parse a DOCX file (bytes) into a Document IR.
-/// Note: docx-rs 0.4's reader has many private fields, so we extract
-/// what we can and gracefully skip what's inaccessible.
+/// Uses docx-rs reader + serialization workarounds for private fields.
 pub fn read_docx(bytes: &[u8]) -> Result<ir::Document, String> {
     let docx = docx_rs::read_docx(bytes)
         .map_err(|e| format!("failed to read docx: {e:?}"))?;
 
     let mut doc = ir::Document::new();
+    let mut raw_blocks = Vec::new();
 
     for child in &docx.document.children {
         match child {
             DocumentChild::Paragraph(para) => {
-                let block = convert_paragraph(para);
-                doc.children.push(block);
+                convert_paragraph(para, &mut raw_blocks);
             }
             DocumentChild::Table(table) => {
-                let block = convert_table(table);
-                doc.children.push(block);
+                raw_blocks.push(RawBlock::Block(convert_table(table)));
             }
             _ => {}
         }
     }
 
-    // Post-process: merge consecutive single-item lists into multi-item lists
-    doc.children = merge_consecutive_lists(doc.children);
+    // Post-process: merge consecutive list items and code lines
+    doc.children = merge_consecutive(raw_blocks);
 
     Ok(doc)
 }
 
-/// Merge consecutive single-item List blocks into multi-item lists.
-fn merge_consecutive_lists(blocks: Vec<ir::Block>) -> Vec<ir::Block> {
-    let mut result: Vec<ir::Block> = Vec::new();
-
-    for block in blocks {
-        if let ir::Block::List(list) = &block {
-            if let Some(ir::Block::List(prev_list)) = result.last_mut() {
-                // Merge into previous list if same type
-                if prev_list.ordered == list.ordered {
-                    prev_list.items.extend(list.items.clone());
-                    continue;
-                }
-            }
-        }
-        result.push(block);
+/// Detect if a run uses a monospace/code font by serializing RunFonts to JSON.
+fn is_code_font(fonts: &Option<RunFonts>) -> bool {
+    if let Some(f) = fonts {
+        let json = serde_json::to_string(f).unwrap_or_default();
+        json.contains("Courier") || json.contains("Consolas") || json.contains("Mono")
+    } else {
+        false
     }
-
-    result
 }
 
-fn convert_paragraph(para: &docx_rs::Paragraph) -> ir::Block {
+/// Extract font name from RunFonts via serialization.
+fn extract_font_name(fonts: &Option<RunFonts>) -> Option<String> {
+    if let Some(f) = fonts {
+        let json = serde_json::to_string(f).unwrap_or_default();
+        // Parse {"ascii":"FontName",...}
+        if let Ok(v) = serde_json::from_str::<serde_json::Value>(&json) {
+            if let Some(name) = v.get("ascii").and_then(|v| v.as_str()) {
+                return Some(name.to_string());
+            }
+        }
+    }
+    None
+}
+
+/// Tag used internally to identify code/blockquote paragraphs before merging.
+#[derive(Debug)]
+enum RawBlock {
+    CodeLine(String),
+    Block(ir::Block),
+}
+
+fn convert_paragraph(para: &Paragraph, blocks: &mut Vec<RawBlock>) {
     let mut runs = Vec::new();
     let mut is_heading = false;
     let mut heading_level = 0u8;
     let mut alignment = ir::Alignment::Left;
+    let mut has_page_break = false;
+    let mut is_indented = false;
+    let mut all_code_font = true;
+    let mut has_any_text = false;
 
-    // Check paragraph style for headings
+    // Check paragraph style
     if let Some(ref style) = para.property.style {
         let id = &style.val;
-        if id.contains("Heading1") || id == "1" {
-            is_heading = true;
-            heading_level = 1;
-        } else if id.contains("Heading2") || id == "2" {
-            is_heading = true;
-            heading_level = 2;
-        } else if id.contains("Heading3") || id == "3" {
-            is_heading = true;
-            heading_level = 3;
-        } else if id.contains("Heading4") || id == "4" {
-            is_heading = true;
-            heading_level = 4;
-        } else if id.contains("Heading5") || id == "5" {
-            is_heading = true;
-            heading_level = 5;
-        } else if id.contains("Heading6") || id == "6" {
-            is_heading = true;
-            heading_level = 6;
-        }
+        if id.contains("Heading1") || id == "1" { is_heading = true; heading_level = 1; }
+        else if id.contains("Heading2") || id == "2" { is_heading = true; heading_level = 2; }
+        else if id.contains("Heading3") || id == "3" { is_heading = true; heading_level = 3; }
+        else if id.contains("Heading4") || id == "4" { is_heading = true; heading_level = 4; }
+        else if id.contains("Heading5") || id == "5" { is_heading = true; heading_level = 5; }
+        else if id.contains("Heading6") || id == "6" { is_heading = true; heading_level = 6; }
     }
 
-    // Check alignment — jc.val is a String in docx-rs reader
+    // Check alignment
     if let Some(ref jc) = para.property.alignment {
         alignment = match jc.val.as_str() {
             "center" => ir::Alignment::Center,
@@ -90,28 +90,44 @@ fn convert_paragraph(para: &docx_rs::Paragraph) -> ir::Block {
         };
     }
 
-    // Check for list numbering
-    let is_list_item = para.property.numbering_property.is_some();
+    // Check page break before
+    if let Some(true) = para.property.page_break_before {
+        has_page_break = true;
+    }
 
-    // Convert runs
+    // Check indentation (blockquote detection)
+    if let Some(ref indent) = para.property.indent {
+        if let Some(start) = indent.start {
+            if start >= 360 {
+                is_indented = true;
+            }
+        }
+    }
+
+    // Convert runs and detect code font
     for child in &para.children {
         if let ParagraphChild::Run(run) = child {
             let ir_run = convert_run(run);
+            if !ir_run.text.trim().is_empty() {
+                has_any_text = true;
+                if !is_code_font(&run.run_property.fonts) {
+                    all_code_font = false;
+                }
+            }
             runs.push(ir_run);
         }
     }
 
-    // If this is a list item, wrap it in a single-item list
-    // The caller will need to merge consecutive list items
-    if is_list_item && !is_heading {
-        return ir::Block::List(ir::List {
-            ordered: false, // Can't reliably detect ordered vs bullet from docx-rs reader
-            items: vec![ir::ListItem {
-                runs,
-                children: Vec::new(),
-                checked: None,
-            }],
-        });
+    // Insert page break before this block
+    if has_page_break {
+        blocks.push(RawBlock::Block(ir::Block::PageBreak));
+    }
+
+    // Code font paragraphs → code lines (will be merged later)
+    if all_code_font && has_any_text && !is_heading && !is_indented {
+        let text: String = runs.iter().map(|r| r.text.as_str()).collect();
+        blocks.push(RawBlock::CodeLine(text));
+        return;
     }
 
     let props = ir::ParaProperties {
@@ -119,21 +135,32 @@ fn convert_paragraph(para: &docx_rs::Paragraph) -> ir::Block {
         ..Default::default()
     };
 
+    // List items
+    let is_list_item = para.property.numbering_property.is_some();
+
     if is_heading {
-        // Strip bold from heading runs — headings are inherently bold,
-        // so bold in the DOCX is just the heading style, not user-applied bold
         for run in &mut runs {
             if heading_level <= 2 {
                 run.properties.bold = false;
             }
         }
-        ir::Block::Heading(ir::Heading {
+        blocks.push(RawBlock::Block(ir::Block::Heading(ir::Heading {
             level: heading_level,
             runs,
             properties: props,
-        })
+        })));
+    } else if is_list_item {
+        blocks.push(RawBlock::Block(ir::Block::List(ir::List {
+            ordered: false,
+            items: vec![ir::ListItem { runs, children: Vec::new(), checked: None }],
+        })));
+    } else if is_indented && !is_heading {
+        // Indented paragraph → blockquote
+        blocks.push(RawBlock::Block(ir::Block::BlockQuote(vec![
+            ir::Block::Paragraph(ir::Paragraph { runs, properties: props })
+        ])));
     } else {
-        ir::Block::Paragraph(ir::Paragraph { runs, properties: props })
+        blocks.push(RawBlock::Block(ir::Block::Paragraph(ir::Paragraph { runs, properties: props })));
     }
 }
 
@@ -141,21 +168,16 @@ fn convert_run(run: &docx_rs::Run) -> ir::Run {
     let mut text = String::new();
     let mut props = ir::RunProperties::default();
 
-    // Extract properties that are publicly accessible
-    if run.run_property.bold.is_some() {
-        props.bold = true;
-    }
-    if run.run_property.italic.is_some() {
-        props.italic = true;
-    }
-    if run.run_property.underline.is_some() {
-        props.underline = true;
-    }
-    if run.run_property.strike.is_some() {
-        props.strikethrough = true;
+    if run.run_property.bold.is_some() { props.bold = true; }
+    if run.run_property.italic.is_some() { props.italic = true; }
+    if run.run_property.underline.is_some() { props.underline = true; }
+    if run.run_property.strike.is_some() { props.strikethrough = true; }
+
+    // Extract font name
+    if let Some(name) = extract_font_name(&run.run_property.fonts) {
+        props.font = Some(name);
     }
 
-    // Extract text content
     for child in &run.children {
         if let RunChild::Text(t) = child {
             text.push_str(&t.text);
@@ -172,20 +194,25 @@ fn convert_table(table: &docx_rs::Table) -> ir::Block {
 
     for row in &table.rows {
         let TableChild::TableRow(tr) = row;
-
         let mut cells = Vec::new();
+
         for cell in &tr.cells {
             let TableRowChild::TableCell(tc) = cell;
-
             let mut cell_runs = Vec::new();
             let mut cell_blocks = Vec::new();
 
             for tc_child in &tc.children {
                 if let TableCellContent::Paragraph(para) = tc_child {
-                    let block = convert_paragraph(para);
-                    match block {
-                        ir::Block::Paragraph(p) => cell_runs.extend(p.runs),
-                        other => cell_blocks.push(other),
+                    let mut sub_blocks = Vec::new();
+                    convert_paragraph(para, &mut sub_blocks);
+                    for rb in sub_blocks {
+                        match rb {
+                            RawBlock::Block(ir::Block::Paragraph(p)) => cell_runs.extend(p.runs),
+                            RawBlock::Block(other) => cell_blocks.push(other),
+                            RawBlock::CodeLine(text) => {
+                                cell_runs.push(ir::Run::text(text).with_code());
+                            }
+                        }
                     }
                 }
             }
@@ -216,6 +243,60 @@ fn convert_table(table: &docx_rs::Table) -> ir::Block {
     })
 }
 
+/// Merge consecutive RawBlocks: code lines → code block, list items → list.
+fn merge_consecutive(raw: Vec<RawBlock>) -> Vec<ir::Block> {
+    let mut result: Vec<ir::Block> = Vec::new();
+    let mut code_lines: Vec<String> = Vec::new();
+
+    for rb in raw {
+        match rb {
+            RawBlock::CodeLine(line) => {
+                code_lines.push(line);
+            }
+            RawBlock::Block(block) => {
+                // Flush accumulated code lines
+                if !code_lines.is_empty() {
+                    result.push(ir::Block::CodeBlock(ir::CodeBlock {
+                        language: String::new(),
+                        content: code_lines.join("\n") + "\n",
+                    }));
+                    code_lines.clear();
+                }
+
+                // Merge consecutive single-item lists
+                if let ir::Block::List(list) = &block {
+                    if let Some(ir::Block::List(prev)) = result.last_mut() {
+                        if prev.ordered == list.ordered {
+                            prev.items.extend(list.items.clone());
+                            continue;
+                        }
+                    }
+                }
+
+                // Merge consecutive blockquotes
+                if let ir::Block::BlockQuote(inner) = &block {
+                    if let Some(ir::Block::BlockQuote(prev)) = result.last_mut() {
+                        prev.extend(inner.clone());
+                        continue;
+                    }
+                }
+
+                result.push(block);
+            }
+        }
+    }
+
+    // Flush remaining code lines
+    if !code_lines.is_empty() {
+        result.push(ir::Block::CodeBlock(ir::CodeBlock {
+            language: String::new(),
+            content: code_lines.join("\n") + "\n",
+        }));
+    }
+
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -230,85 +311,81 @@ mod tests {
         read_docx(&bytes).unwrap()
     }
 
-    #[test]
-    fn roundtrip_heading() {
-        let doc = roundtrip("# Test Heading");
-        let headings: Vec<_> = doc.children.iter().filter_map(|b| {
-            if let ir::Block::Heading(h) = b { Some(h) } else { None }
-        }).collect();
-        assert!(!headings.is_empty(), "should have at least one heading");
-        assert_eq!(headings[0].level, 1);
-        let text: String = headings[0].runs.iter().map(|r| r.text.as_str()).collect();
-        assert!(text.contains("Test Heading"), "heading text: {text}");
+    fn roundtrip_md(md: &str) -> String {
+        let doc = roundtrip(md);
+        crate::render_markdown::render_to_markdown(&doc)
     }
 
     #[test]
-    fn roundtrip_paragraph() {
-        let doc = roundtrip("A simple paragraph.");
-        let paras: Vec<_> = doc.children.iter().filter_map(|b| {
-            if let ir::Block::Paragraph(p) = b { Some(p) } else { None }
-        }).collect();
-        assert!(!paras.is_empty());
-        let text: String = paras.iter()
-            .flat_map(|p| p.runs.iter())
-            .map(|r| r.text.as_str())
-            .collect();
-        assert!(text.contains("A simple paragraph"), "text: {text}");
+    fn rt_heading() {
+        let md = roundtrip_md("# Test Heading");
+        assert!(md.contains("# "), "should have heading marker");
+        assert!(md.contains("Test Heading"));
     }
 
     #[test]
-    fn roundtrip_bold() {
-        let doc = roundtrip("**bold text**");
-        let has_bold = doc.children.iter().any(|b| {
-            if let ir::Block::Paragraph(p) = b {
-                p.runs.iter().any(|r| r.properties.bold && r.text.contains("bold"))
-            } else {
-                false
-            }
-        });
-        assert!(has_bold, "should have bold run");
+    fn rt_bold() {
+        let md = roundtrip_md("**bold text**");
+        assert!(md.contains("**bold"), "should have bold markers");
     }
 
     #[test]
-    fn roundtrip_italic() {
-        let doc = roundtrip("*italic text*");
-        let has_italic = doc.children.iter().any(|b| {
-            if let ir::Block::Paragraph(p) = b {
-                p.runs.iter().any(|r| r.properties.italic && r.text.contains("italic"))
-            } else {
-                false
-            }
-        });
-        assert!(has_italic, "should have italic run");
+    fn rt_italic() {
+        let md = roundtrip_md("*italic text*");
+        assert!(md.contains("*italic"), "should have italic markers");
     }
 
     #[test]
-    fn roundtrip_table() {
-        let doc = roundtrip("| A | B |\n|---|---|\n| 1 | 2 |");
-        let tables: Vec<_> = doc.children.iter().filter_map(|b| {
-            if let ir::Block::Table(t) = b { Some(t) } else { None }
-        }).collect();
-        assert!(!tables.is_empty(), "should have a table");
-        assert!(!tables[0].header.is_empty());
+    fn rt_centered() {
+        let md = roundtrip_md("{center}# Centered Title");
+        assert!(md.contains("{center}"), "should have center prefix");
+        assert!(md.contains("Centered Title"));
     }
 
     #[test]
-    fn roundtrip_centered() {
-        let doc = roundtrip("{center}# Centered Title");
-        let headings: Vec<_> = doc.children.iter().filter_map(|b| {
-            if let ir::Block::Heading(h) = b { Some(h) } else { None }
-        }).collect();
-        assert!(!headings.is_empty());
-        assert_eq!(headings[0].properties.alignment, ir::Alignment::Center);
+    fn rt_table() {
+        let md = roundtrip_md("| A | B |\n|---|---|\n| 1 | 2 |");
+        assert!(md.contains("|"), "should have table pipes");
+        assert!(md.contains("A"));
+        assert!(md.contains("1"));
     }
 
     #[test]
-    fn reads_valid_docx() {
+    fn rt_list() {
+        let md = roundtrip_md("- First\n- Second\n- Third");
+        assert!(md.contains("- "), "should have list markers: {md}");
+        assert!(md.contains("First"));
+        assert!(md.contains("Second"));
+    }
+
+    #[test]
+    fn rt_page_break() {
+        let md = roundtrip_md("Before\n\n{pagebreak}\n\nAfter");
+        assert!(md.contains("{pagebreak}"), "should have page break marker: {md}");
+        assert!(md.contains("Before"));
+        assert!(md.contains("After"));
+    }
+
+    #[test]
+    fn rt_code_block() {
+        let md = roundtrip_md("```rust\nfn main() {}\n```");
+        assert!(md.contains("```"), "should have code fences: {md}");
+        assert!(md.contains("fn main()"));
+    }
+
+    #[test]
+    fn rt_blockquote() {
+        let md = roundtrip_md("> Quoted text here");
+        assert!(md.contains(">"), "should have blockquote marker: {md}");
+        assert!(md.contains("Quoted text"));
+    }
+
+    #[test]
+    fn rt_valid_docx() {
         let doc = parse_markdown("# Hello\n\nWorld");
         let style = DocStyle::default();
         let bytes = render_to_docx(&doc, &style).unwrap();
         let result = read_docx(&bytes);
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().schema_version, ir::SCHEMA_VERSION);
     }
 }

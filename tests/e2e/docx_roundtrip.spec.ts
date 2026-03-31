@@ -161,6 +161,106 @@ test.describe('DOCX Import/Export Round-trip', () => {
     await deleteFile(page, 'rt-list.docx');
   });
 
+  test('code block survives round-trip', async ({ page }) => {
+    const md = '```rust\nfn main() {\n    println!("Hello!");\n}\n```';
+    const exported = await page.evaluate(async (content: string) => {
+      const resp = await fetch('/api/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, from: 'markdown', to: 'docx' }),
+      });
+      return resp.json();
+    }, md);
+
+    await page.evaluate(async (b64: string) => {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      await fetch('/api/files/rt-code.docx', { method: 'PUT', body: new Blob([bytes]) });
+    }, exported.content);
+
+    const imported = await page.evaluate(async () => {
+      const resp = await fetch('/api/files/rt-code.docx');
+      return resp.text();
+    });
+
+    expect(imported).toContain('```');
+    expect(imported).toContain('fn main()');
+
+    await page.locator('.editor-textarea').fill(imported);
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: 'test-results/rt-code-block.png' });
+
+    await deleteFile(page, 'rt-code.docx');
+  });
+
+  test('blockquote survives round-trip', async ({ page }) => {
+    const md = '> This is a quoted passage from the source material.';
+    const exported = await page.evaluate(async (content: string) => {
+      const resp = await fetch('/api/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, from: 'markdown', to: 'docx' }),
+      });
+      return resp.json();
+    }, md);
+
+    await page.evaluate(async (b64: string) => {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      await fetch('/api/files/rt-quote.docx', { method: 'PUT', body: new Blob([bytes]) });
+    }, exported.content);
+
+    const imported = await page.evaluate(async () => {
+      const resp = await fetch('/api/files/rt-quote.docx');
+      return resp.text();
+    });
+
+    expect(imported).toContain('>');
+    expect(imported).toContain('quoted passage');
+
+    await page.locator('.editor-textarea').fill(imported);
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: 'test-results/rt-blockquote.png' });
+
+    await deleteFile(page, 'rt-quote.docx');
+  });
+
+  test('page break survives round-trip', async ({ page }) => {
+    const md = 'Page one content.\n\n{pagebreak}\n\nPage two content.';
+    const exported = await page.evaluate(async (content: string) => {
+      const resp = await fetch('/api/convert', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ content, from: 'markdown', to: 'docx' }),
+      });
+      return resp.json();
+    }, md);
+
+    await page.evaluate(async (b64: string) => {
+      const binary = atob(b64);
+      const bytes = new Uint8Array(binary.length);
+      for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+      await fetch('/api/files/rt-pagebreak.docx', { method: 'PUT', body: new Blob([bytes]) });
+    }, exported.content);
+
+    const imported = await page.evaluate(async () => {
+      const resp = await fetch('/api/files/rt-pagebreak.docx');
+      return resp.text();
+    });
+
+    expect(imported).toContain('{pagebreak}');
+    expect(imported).toContain('Page one');
+    expect(imported).toContain('Page two');
+
+    await page.locator('.editor-textarea').fill(imported);
+    await page.waitForTimeout(500);
+    await page.screenshot({ path: 'test-results/rt-pagebreak.png' });
+
+    await deleteFile(page, 'rt-pagebreak.docx');
+  });
+
   test('full document round-trip and screenshot', async ({ page }) => {
     const original = [
       '{center}# Software Engineering Report',

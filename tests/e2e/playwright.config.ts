@@ -11,7 +11,12 @@ export default defineConfig({
       executablePath: '/opt/chrome-linux/chrome',
       args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
     },
+    // Capture screenshot after every test for visual confirmation
+    screenshot: 'on',
+    video: 'off',
   },
+  // Save all test artifacts (screenshots) to test-results/
+  outputDir: 'test-results',
   projects: [
     {
       name: 'chromium',

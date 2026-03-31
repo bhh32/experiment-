@@ -1264,6 +1264,7 @@ dependencies = [
  "comrak",
  "docx-rs",
  "serde",
+ "serde_json",
  "shared",
  "tempfile",
  "toolbar",
