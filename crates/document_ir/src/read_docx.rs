@@ -24,7 +24,30 @@ pub fn read_docx(bytes: &[u8]) -> Result<ir::Document, String> {
         }
     }
 
+    // Post-process: merge consecutive single-item lists into multi-item lists
+    doc.children = merge_consecutive_lists(doc.children);
+
     Ok(doc)
+}
+
+/// Merge consecutive single-item List blocks into multi-item lists.
+fn merge_consecutive_lists(blocks: Vec<ir::Block>) -> Vec<ir::Block> {
+    let mut result: Vec<ir::Block> = Vec::new();
+
+    for block in blocks {
+        if let ir::Block::List(list) = &block {
+            if let Some(ir::Block::List(prev_list)) = result.last_mut() {
+                // Merge into previous list if same type
+                if prev_list.ordered == list.ordered {
+                    prev_list.items.extend(list.items.clone());
+                    continue;
+                }
+            }
+        }
+        result.push(block);
+    }
+
+    result
 }
 
 fn convert_paragraph(para: &docx_rs::Paragraph) -> ir::Block {
@@ -67,6 +90,9 @@ fn convert_paragraph(para: &docx_rs::Paragraph) -> ir::Block {
         };
     }
 
+    // Check for list numbering
+    let is_list_item = para.property.numbering_property.is_some();
+
     // Convert runs
     for child in &para.children {
         if let ParagraphChild::Run(run) = child {
@@ -75,12 +101,32 @@ fn convert_paragraph(para: &docx_rs::Paragraph) -> ir::Block {
         }
     }
 
+    // If this is a list item, wrap it in a single-item list
+    // The caller will need to merge consecutive list items
+    if is_list_item && !is_heading {
+        return ir::Block::List(ir::List {
+            ordered: false, // Can't reliably detect ordered vs bullet from docx-rs reader
+            items: vec![ir::ListItem {
+                runs,
+                children: Vec::new(),
+                checked: None,
+            }],
+        });
+    }
+
     let props = ir::ParaProperties {
         alignment,
         ..Default::default()
     };
 
     if is_heading {
+        // Strip bold from heading runs — headings are inherently bold,
+        // so bold in the DOCX is just the heading style, not user-applied bold
+        for run in &mut runs {
+            if heading_level <= 2 {
+                run.properties.bold = false;
+            }
+        }
         ir::Block::Heading(ir::Heading {
             level: heading_level,
             runs,

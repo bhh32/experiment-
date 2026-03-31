@@ -28,10 +28,13 @@ async fn read_file(
 ) -> impl IntoResponse {
     match file_ops::read_file(&state.data_dir, &path).await {
         Ok(contents) => {
-            // Auto-convert DOCX/ODF to markdown for the editor
+            // Auto-convert DOCX to markdown via Document IR pipeline
             if path.ends_with(".docx") {
-                match conversion::docx_to_markdown(&contents) {
-                    Ok(md) => return (StatusCode::OK, md).into_response(),
+                match document_ir::read_docx(&contents) {
+                    Ok(doc) => {
+                        let md = document_ir::render_to_markdown(&doc);
+                        return (StatusCode::OK, md).into_response();
+                    }
                     Err(e) => return (
                         StatusCode::INTERNAL_SERVER_ERROR,
                         format!("Failed to convert DOCX: {e}"),
@@ -68,9 +71,9 @@ async fn read_file(
 async fn write_file(
     State(state): State<AppState>,
     Path(path): Path<String>,
-    body: String,
+    body: axum::body::Bytes,
 ) -> impl IntoResponse {
-    match file_ops::write_file(&state.data_dir, &path, body.as_bytes()).await {
+    match file_ops::write_file(&state.data_dir, &path, &body).await {
         Ok(()) => StatusCode::OK,
         Err(e) => {
             if e.to_string().contains("path") {
