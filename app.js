@@ -15,7 +15,7 @@ themeToggle.addEventListener("click", () => {
   localStorage.setItem("lumen-theme", next);
 });
 
-// Command palette: ⌘K / Ctrl+K opens, Esc closes, click backdrop closes.
+// Command palette: Ctrl+K opens, Esc closes, click backdrop closes.
 function openPalette() {
   palette.setAttribute("aria-hidden", "false");
   const input = palette.querySelector("input");
@@ -25,8 +25,7 @@ function closePalette() {
   palette.setAttribute("aria-hidden", "true");
 }
 window.addEventListener("keydown", (e) => {
-  const meta = e.metaKey || e.ctrlKey;
-  if (meta && e.key.toLowerCase() === "k") {
+  if (e.ctrlKey && !e.altKey && !e.shiftKey && e.key.toLowerCase() === "k") {
     e.preventDefault();
     palette.getAttribute("aria-hidden") === "false" ? closePalette() : openPalette();
   } else if (e.key === "Escape") {
