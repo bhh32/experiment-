@@ -55,3 +55,20 @@ document.querySelectorAll(".rail-btn").forEach((btn) => {
     btn.classList.add("active");
   });
 });
+
+// Tour overlay — numbered pins + floating legend, toggled by the ? button.
+// Defaults ON for first visit so newcomers know what they're looking at.
+const tourBtn = document.getElementById("tourToggle");
+const tourClose = document.getElementById("tourClose");
+const TOUR_KEY = "lumen-tour";
+function setTour(on) {
+  document.body.classList.toggle("tour-on", on);
+  if (tourBtn) tourBtn.setAttribute("aria-pressed", on ? "true" : "false");
+  localStorage.setItem(TOUR_KEY, on ? "on" : "off");
+}
+const tourStored = localStorage.getItem(TOUR_KEY);
+setTour(tourStored === null ? true : tourStored === "on");
+if (tourBtn) tourBtn.addEventListener("click", () => {
+  setTour(!document.body.classList.contains("tour-on"));
+});
+if (tourClose) tourClose.addEventListener("click", () => setTour(false));

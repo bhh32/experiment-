@@ -13,6 +13,7 @@
        ====================================================== -->
   <header class="topbar" role="banner">
     <div class="topbar-left">
+      <span class="tour-pin" aria-hidden="true">1</span>
       <button class="workspace" aria-label="Switch workspace">
         <span class="workspace-mark" aria-hidden="true">L</span>
         <span class="workspace-name">acme-platform</span>
@@ -31,6 +32,7 @@
     </div>
 
     <div class="topbar-center">
+      <span class="tour-pin" aria-hidden="true">2</span>
       <button class="huddle" aria-label="Start huddle">
         <span class="huddle-dot" aria-hidden="true"></span>
         <svg width="14" height="14" viewBox="0 0 14 14" aria-hidden="true"><path d="M7 1.5a2.5 2.5 0 0 0-2.5 2.5v3a2.5 2.5 0 0 0 5 0V4A2.5 2.5 0 0 0 7 1.5zM3 7a4 4 0 0 0 8 0M7 11v1.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/></svg>
@@ -47,6 +49,7 @@
     </div>
 
     <div class="topbar-right">
+      <button class="tour-toggle" id="tourToggle" aria-label="Toggle UI tour" aria-pressed="true" title="Toggle UI tour">?</button>
       <button class="icon-btn" id="themeToggle" aria-label="Toggle theme" title="Toggle theme">
         <svg width="16" height="16" viewBox="0 0 16 16" aria-hidden="true"><path d="M8 2v1.5M8 12.5V14M2 8h1.5M12.5 8H14M3.8 3.8l1 1M11.2 11.2l1 1M3.8 12.2l1-1M11.2 4.8l1-1" stroke="currentColor" stroke-width="1.4" stroke-linecap="round"/><circle cx="8" cy="8" r="3" fill="none" stroke="currentColor" stroke-width="1.4"/></svg>
       </button>
@@ -64,6 +67,7 @@
 
     <!-- LEFT RAIL — icon-only, no file tree by default -->
     <aside class="rail" aria-label="Primary navigation">
+      <span class="tour-pin" aria-hidden="true">3</span>
       <button class="rail-btn active" title="Pulse — workspace activity (Ctrl+1)">
         <svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M2 9h3l2-5 4 10 2-5h3" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"/></svg>
       </button>
@@ -88,6 +92,7 @@
 
     <!-- CONTEXT PANEL — replaces traditional file tree with semantic context -->
     <section class="context" aria-label="Context">
+      <span class="tour-pin pin-tr" aria-hidden="true">4</span>
       <div class="ctx-header">
         <span class="ctx-eyebrow">Pulse</span>
         <button class="ctx-action" aria-label="Filter">Alt+F</button>
@@ -139,8 +144,10 @@
 
     <!-- EDITOR AREA -->
     <section class="editor" aria-label="Editor">
+      <span class="tour-pin pin-br" aria-hidden="true">6</span>
       <!-- Focus stack — replaces tabs. Shows lineage of how you got here. -->
       <div class="focus-stack" aria-label="Focus stack">
+        <span class="tour-pin pin-tr" aria-hidden="true">5</span>
         <button class="focus-pill ghost">services</button>
         <span class="focus-arrow">→</span>
         <button class="focus-pill ghost">BillingService.charge()</button>
@@ -185,6 +192,7 @@
 
         <!-- Inline AI suggestion (ghost line, inline like Copilot but with affordances) -->
         <div class="ai-ghost" role="region" aria-label="AI suggestion">
+          <span class="tour-pin pin-tr" aria-hidden="true">7</span>
           <div class="ai-ghost-head">
             <span class="ai-spark" aria-hidden="true">✦</span>
             <span>Suggest extracting the totals computation — used in 3 other places.</span>
@@ -207,6 +215,7 @@
 
     <!-- RIGHT PANEL — co-pilot + threads + diff -->
     <aside class="copilot" aria-label="Co-pilot &amp; threads">
+      <span class="tour-pin" aria-hidden="true">8</span>
       <div class="cp-tabs" role="tablist">
         <button class="cp-tab active" role="tab" aria-selected="true">Chat</button>
         <button class="cp-tab" role="tab">Threads <span class="cp-count">4</span></button>
@@ -256,6 +265,7 @@
 
   <!-- STATUS BAR -->
   <footer class="status" role="contentinfo">
+    <span class="tour-pin" aria-hidden="true">9</span>
     <div class="status-left">
       <span class="status-item"><span class="dot live" aria-hidden="true"></span>main · synced</span>
       <span class="status-item">TypeScript · 5.6</span>
@@ -292,6 +302,79 @@
       </div>
     </div>
   </div>
+
+  <!-- TOUR LEGEND — keys to the numbered pins; toggled by the ? button -->
+  <aside class="tour-legend" id="tourLegend" aria-label="UI tour legend">
+    <div class="tour-legend-head">
+      <h4>What you're looking at</h4>
+      <button class="tour-legend-close" id="tourClose" aria-label="Close tour">×</button>
+    </div>
+    <ol>
+      <li>
+        <span class="leg-num">1</span>
+        <div>
+          <div class="leg-title">Workspace + Breadcrumb</div>
+          <div class="leg-desc">Workspace picker (<em>acme-platform</em>), then a context trail that follows wherever you focus — every segment is clickable.</div>
+        </div>
+      </li>
+      <li>
+        <span class="leg-num">2</span>
+        <div>
+          <div class="leg-title">Huddle + Presence</div>
+          <div class="leg-desc">One-click voice/screenshare (Ctrl+H). Avatars are who's actually in this file right now; the amber ring on "T" means Theo is typing.</div>
+        </div>
+      </li>
+      <li>
+        <span class="leg-num">3</span>
+        <div>
+          <div class="leg-title">Left rail (no file tree)</div>
+          <div class="leg-desc">Five primary verbs replacing the file tree: Pulse, Map, Trails, Threads, Reviews. Filesystem-first navigation is gone by default.</div>
+        </div>
+      </li>
+      <li>
+        <span class="leg-num">4</span>
+        <div>
+          <div class="leg-title">Context panel</div>
+          <div class="leg-desc">Semantic context, not folders. <em>Now</em> = what teammates are doing. <em>Recent symbols</em> = jump by function/type/class. <em>Trails</em> = saved breadcrumbs through code.</div>
+        </div>
+      </li>
+      <li>
+        <span class="leg-num">5</span>
+        <div>
+          <div class="leg-title">Focus stack (replaces tabs)</div>
+          <div class="leg-desc">Shows the lineage of how you got here — <em>services → BillingService.charge() → finalizeInvoice()</em>. Back/forward maps to your thinking, not file order.</div>
+        </div>
+      </li>
+      <li>
+        <span class="leg-num">6</span>
+        <div>
+          <div class="leg-title">Editor with collab chrome</div>
+          <div class="leg-desc">Amber caret + "Theo" flag on line 18 = remote cursor. Violet dot in the gutter on line 14 = discussion thread. Bars on the right edge = density minimap (warm = teammate edits, blue = thread).</div>
+        </div>
+      </li>
+      <li>
+        <span class="leg-num">7</span>
+        <div>
+          <div class="leg-title">Inline AI suggestion</div>
+          <div class="leg-desc">A ghost line proposing a refactor — Tab to accept, Alt+Enter to refine in chat, Esc to dismiss. Same affordance as Copilot but you can negotiate.</div>
+        </div>
+      </li>
+      <li>
+        <span class="leg-num">8</span>
+        <div>
+          <div class="leg-title">Co-pilot panel</div>
+          <div class="leg-desc">Chat scoped to the directory you're in (<em>billing/</em>), responses with code citations like <em>invoice.ts:16</em>, one-click "Apply across N files" or "Open as PR". Threads tab = inline discussions; Diff tab = pending changes.</div>
+        </div>
+      </li>
+      <li>
+        <span class="leg-num">9</span>
+        <div>
+          <div class="leg-title">Status bar + Ctrl+K</div>
+          <div class="leg-desc">Sync state, language, errors/hints, position. Ctrl+K opens the universal palette — symbols, actions, AI prompts, and trails in one list. Try it.</div>
+        </div>
+      </li>
+    </ol>
+  </aside>
 
   <script src="app.js"></script>
 </body>

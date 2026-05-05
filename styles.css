@@ -101,8 +101,11 @@
    Reset-ish
    ========================================================= */
 * { box-sizing: border-box; }
-html, body { height: 100%; margin: 0; }
+html, body { margin: 0; }
+html { height: 100%; overflow-x: auto; overflow-y: auto; }
 body {
+  min-width: 1440px;
+  min-height: 100vh;
   font-family: var(--font-ui);
   font-size: 13px;
   color: var(--fg-0);
@@ -793,6 +796,118 @@ a { color: inherit; text-decoration: none; }
   background: var(--bg-1);
   font-size: 11px; color: var(--fg-2);
 }
+
+/* =========================================================
+   Tour overlay — numbered pins + floating legend
+   (toggled via the ? button in the topbar)
+   ========================================================= */
+body.tour-on .topbar-left,
+body.tour-on .topbar-center,
+body.tour-on .rail,
+body.tour-on .context,
+body.tour-on .editor,
+body.tour-on .ai-ghost,
+body.tour-on .copilot,
+body.tour-on .status,
+body.tour-on .focus-stack { position: relative; }
+
+.tour-pin {
+  display: none;
+  position: absolute;
+  z-index: 50;
+  top: 4px;
+  left: 4px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 6px;
+  border-radius: 999px;
+  background: var(--accent);
+  color: #0b0d11;
+  font: 700 11px/22px var(--font-mono);
+  text-align: center;
+  letter-spacing: 0;
+  box-shadow: 0 0 0 3px var(--accent-bg), 0 4px 14px rgba(0,0,0,.45);
+  pointer-events: auto;
+  user-select: none;
+}
+body.tour-on .tour-pin { display: block; }
+
+.tour-pin.pin-tr { left: auto; right: 4px; }
+.tour-pin.pin-br { left: auto; right: 4px; top: auto; bottom: 4px; }
+.tour-pin.pin-bl { top: auto; bottom: 4px; }
+
+.tour-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px; height: 28px;
+  border-radius: 999px;
+  color: var(--fg-1);
+  font: 700 12px/1 var(--font-ui);
+  background: var(--bg-3);
+  border: 1px solid var(--line);
+  transition: background var(--t-fast), color var(--t-fast);
+}
+.tour-toggle:hover { background: var(--bg-4); color: var(--fg-0); }
+body.tour-on .tour-toggle { background: var(--accent); color: #0b0d11; border-color: transparent; }
+
+.tour-legend {
+  display: none;
+  position: fixed;
+  right: 16px;
+  bottom: 36px;
+  width: 320px;
+  max-height: 70vh;
+  overflow: auto;
+  background: var(--bg-2);
+  border: 1px solid var(--line-2);
+  border-radius: var(--r-3);
+  box-shadow: var(--shadow-2);
+  padding: 14px 14px 12px;
+  z-index: 60;
+  font-family: var(--font-ui);
+  color: var(--fg-1);
+}
+body.tour-on .tour-legend { display: block; }
+.tour-legend-head {
+  display: flex; align-items: center; justify-content: space-between;
+  margin: 0 0 10px;
+}
+.tour-legend-head h4 {
+  margin: 0;
+  font-size: 11px;
+  text-transform: uppercase;
+  color: var(--fg-2);
+  letter-spacing: 0.06em;
+  font-weight: 600;
+}
+.tour-legend-close {
+  width: 22px; height: 22px;
+  border-radius: 999px;
+  color: var(--fg-2);
+}
+.tour-legend-close:hover { background: var(--bg-4); color: var(--fg-0); }
+.tour-legend ol { margin: 0; padding: 0; list-style: none; }
+.tour-legend li {
+  display: grid;
+  grid-template-columns: 22px 1fr;
+  gap: 10px;
+  padding: 8px 0;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  line-height: 1.45;
+}
+.tour-legend li:first-child { border-top: 0; padding-top: 4px; }
+.tour-legend .leg-num {
+  width: 22px; height: 22px;
+  border-radius: 999px;
+  background: var(--accent-bg);
+  color: var(--accent);
+  font: 700 11px/22px var(--font-mono);
+  text-align: center;
+}
+.tour-legend .leg-title { color: var(--fg-0); font-weight: 600; }
+.tour-legend .leg-desc { color: var(--fg-2); margin-top: 2px; }
 
 /* ---- responsive (collapse panels under 1100px) ---- */
 @media (max-width: 1180px) {
