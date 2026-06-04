@@ -1,0 +1,18 @@
+[package]
+name = "oxysf"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "oxy-sf: a fast native reimplementation of common Salesforce CLI commands."
+
+[[bin]]
+name = "oxysf"
+path = "src/main.rs"
+
+[dependencies]
+oxysf-core = { workspace = true }
+oxysf-org = { workspace = true }
+oxysf-data = { workspace = true }
+clap = { workspace = true }

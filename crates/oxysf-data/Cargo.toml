@@ -1,0 +1,15 @@
+[package]
+name = "oxysf-data"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+repository.workspace = true
+description = "The 'data' command topic for oxy-sf (SOQL query)."
+
+[dependencies]
+oxysf-core = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+csv = { workspace = true }

@@ -1,0 +1,44 @@
+[workspace]
+resolver = "2"
+members = [
+    "crates/oxysf-core",
+    "crates/oxysf",
+    "crates/oxysf-org",
+    "crates/oxysf-data",
+]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+authors = ["oxy-sf contributors"]
+repository = "https://github.com/oxy-sf/oxy-sf"
+
+[workspace.dependencies]
+clap = { version = "4", features = ["derive"] }
+indicatif = "0.17"
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "json", "rustls-tls"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "1"
+anyhow = "1"
+url = "2"
+dirs = "5"
+comfy-table = "7"
+jsonwebtoken = "9"
+tiny_http = "0.12"
+webbrowser = "1"
+sha2 = "0.10"
+base64 = "0.22"
+rand = "0.8"
+csv = "1"
+
+# internal crates
+oxysf-core = { path = "crates/oxysf-core" }
+oxysf-org = { path = "crates/oxysf-org" }
+oxysf-data = { path = "crates/oxysf-data" }
+
+# dev
+httpmock = "0.7"
+tempfile = "3"
+rsa = "0.9"
